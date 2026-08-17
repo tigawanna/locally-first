@@ -22,3 +22,8 @@ export const SYNCMETA_KEY_CLIENT_ID = "clientId";
 export const SYNCMETA_KEY_BACKEND_ID = "backendId";
 export const SYNCMETA_KEY_LAST_SYNC_AT = "lastSyncAt";
 export const SYNCMETA_KEY_LAST_ERROR = "lastError";
+export const SYNCMETA_KEY_ROWVERSION_PREFIX = "rowversion:";
+
+export function rowVersionMetaKey(collectionId: string, key: string): string {
+  return `${SYNCMETA_KEY_ROWVERSION_PREFIX}${collectionId}:${key}`;
+}

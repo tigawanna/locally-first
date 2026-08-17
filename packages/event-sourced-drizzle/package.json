@@ -33,6 +33,7 @@
   "exports": {
     ".": "./dist/index.mjs",
     "./pg": "./dist/pg.mjs",
+    "./react": "./dist/react.mjs",
     "./sqlite": "./dist/sqlite.mjs",
     "./package.json": "./package.json"
   },
@@ -62,18 +63,33 @@
     "@arethetypeswrong/cli": "^0.18.4",
     "@electric-sql/pglite": "^0.5.5",
     "@repo/typescript-config": "workspace:*",
+    "@testing-library/react": "^16.3.0",
     "@types/better-sqlite3": "^9.6.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "better-sqlite3": "^13.0.3",
     "drizzle-kit": "^0.31.4",
     "drizzle-orm": "^0.45.2",
+    "jsdom": "^26.1.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
     "tsdown": "^0.22.3",
     "typescript": "catalog:",
     "vitest": "4.1.9"
   },
   "peerDependencies": {
-    "drizzle-orm": ">=0.45.0"
+    "drizzle-orm": ">=0.45.0",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=18"
+  },
+  "inlinedDependencies": {
+    "better-sqlite3": "13.0.3"
   }
 }

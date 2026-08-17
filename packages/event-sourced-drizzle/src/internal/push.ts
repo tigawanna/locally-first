@@ -2,6 +2,7 @@ import type { NormalizedSyncTransport } from "../core/sync";
 import type { EventSourcedLogger } from "../utils/logger";
 import type { EmitHook } from "./hooks";
 import { CONFLICT_ERROR_CODE } from "./constants";
+import { restoreRowVersion } from "./row-versions";
 import type {
   DeadLetterReason,
   DeadLetterRow,
@@ -25,6 +26,7 @@ export type PushArgs = {
   now: number;
   emit: EmitHook;
   log: EventSourcedLogger;
+  conflictDetection?: boolean;
 };
 
 /**
@@ -130,6 +132,9 @@ async function deadLetter(
 
   await adapter.insertDeadLetter(record);
   await adapter.deleteOutboxRow(entry.eventId);
+  if (reason === "conflict") {
+    await restoreRowVersion(adapter, entry.collectionId, entry.key, entry.baseVersion);
+  }
 
   log.warn("event dead-lettered", {
     eventId: entry.eventId,

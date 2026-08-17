@@ -130,6 +130,7 @@ export type ReplayContext = {
   eventSchemaVersion: number;
   upcastEvent?: UpcastEventFn | undefined;
   maxReplayAttempts: number;
+  conflictDetection: boolean;
   emit: EmitHook;
   log: EventSourcedLogger;
 };

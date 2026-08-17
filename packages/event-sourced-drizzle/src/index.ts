@@ -30,6 +30,12 @@ export { getActiveTransaction } from "./core/transaction";
 
 export { createOptimisticStateTracker, OptimisticStateTracker } from "./core/optimistic-state";
 
+export { createSqliteEventLogBackend } from "./testing/sqlite-event-log-backend";
+export type {
+  SqliteEventLogBackend,
+  SqliteEventLogBackendOptions,
+} from "./testing/sqlite-event-log-backend";
+
 export type {
   CollectionDef,
   CollectionMap,

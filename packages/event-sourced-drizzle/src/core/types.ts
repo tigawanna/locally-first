@@ -121,6 +121,11 @@ export type EventSourcedDrizzleConfig<TCollections extends CollectionMap> = {
   pushBatchSize?: number;
   /** What to do when backend identity changes. Defaults to "resetCursor". */
   backendMismatch?: BackendMismatchPolicy;
+  /**
+   * Stamp `baseVersion` on outgoing events (stored in sync_meta) so a server
+   * can reject stale writes with `CONFLICT`. Off by default.
+   */
+  conflictDetection?: boolean;
   /** Lifecycle hooks. */
   hooks?: EventSourcedHooks;
 };
@@ -179,6 +184,8 @@ export type EventSourcedDrizzle<TCollections extends CollectionMap> = {
   /** Runtime sync toggle. */
   getSyncEnabled: () => boolean;
   setSyncEnabled: (enabled: boolean) => void;
+  /** Subscribe to `setSyncEnabled` changes. Returns an unsubscribe function. */
+  subscribeSyncEnabled: (listener: (enabled: boolean) => void) => () => void;
   /** Releases internal resources. */
   dispose: () => void;
 };

@@ -1,6 +1,6 @@
 # event-sourced-drizzle
 
-Event-sourced local-first sync engine for **Drizzle ORM**. Same push/pull wire protocol as `event-sourced-collection`, but all state lives in your SQL database (SQLite, PGlite, Postgres) — managed by Drizzle, not TanStack DB memory.
+Event-sourced local-first sync engine for **Drizzle ORM**. Same push/pull wire protocol as [event-sourced-collection](https://github.com/tigawanna/locally-first/tree/main/packages/event-sourced-drizzle), but all state lives in your SQL database (SQLite, PGlite, Postgres) — managed by Drizzle, not TanStack DB memory.
 
 Every `insert`, `update`, and `delete` goes through a typed `mutate` API that atomically writes the domain table AND appends an outbox event. Sync pushes outbox events to your server and pulls remote events into an inbox, replaying them into domain tables.
 
@@ -77,15 +77,18 @@ await engine.mutate.insert("todos", {
 const rows = db.select().from(todos).all();
 ```
 
-**Do not** `db.insert()`, `db.update()`, or `db.delete()` on synced tables. Those skip the outbox, so the change never syncs and a later pull can overwrite it. **Do** query with Drizzle as usual (`select`, joins, aggregates).
+> [!WARNING]
+> **Do not** `db.insert()`, `db.update()`, or `db.delete()` on synced tables. Those skip the outbox, so the change never syncs and a later pull can overwrite it. **Do** query with Drizzle as usual (`select`, joins, aggregates).
 
-better-sqlite3’s Drizzle `transaction` is sync-only. If mutate throws `Transaction function cannot return a promise`, wrap `BEGIN`/`COMMIT` around the adapter like [`examples/sqlite.ts`](./examples/sqlite.ts).
+> [!NOTE]
+> better-sqlite3’s Drizzle `transaction` is sync-only. If mutate throws `Transaction function cannot return a promise`, wrap `BEGIN`/`COMMIT` around the adapter like [`examples/sqlite.ts`](./examples/sqlite.ts).
 
 PGlite uses the same engine API with `event-sourced-drizzle/pg` — see [`examples/pglite.ts`](./examples/pglite.ts).
 
 ## Migrations
 
-This package does **not** create or migrate tables. You own the schema (`defineOutboxTable`, `defineInboxTable`, domain tables, `sync_meta`, dead-letter) and you apply it with whatever Drizzle pipeline you already use.
+> [!NOTE]
+> This package does **not** create or migrate tables. You own the schema (`defineOutboxTable`, `defineInboxTable`, domain tables, `sync_meta`, dead-letter) and you apply it with whatever Drizzle pipeline you already use.
 
 **Node / servers:** drizzle-kit as usual — `drizzle-kit generate`, then `migrate()` from `drizzle-orm/*/migrator`, or `drizzle-kit push` in development.
 
@@ -236,6 +239,7 @@ sync: { push: fn, pull: fn }
 | `retry`                | 8 attempts, 1s base, 5min cap | Backoff for retryable push failures                          |
 | `pushBatchSize`        | `100`                         | Max events per push request                                  |
 | `backendMismatch`      | `"resetCursor"`               | What to do when server identity changes                      |
+| `conflictDetection`    | `false`                       | Stamp `baseVersion` for stale-write rejection                |
 | `hooks`                | none                          | Lifecycle hooks                                              |
 | `debug`                | `false`                       | Logger config                                                |
 
@@ -258,9 +262,10 @@ Same set as `event-sourced-collection`:
 
 ## Exports
 
-- `event-sourced-drizzle` — `createEventSourcedDrizzle`, protocol types, logger, UUID
-- `event-sourced-drizzle/sqlite` — `defineOutboxTable`, `defineInboxTable`, column defs
+- `event-sourced-drizzle` — `createEventSourcedDrizzle`, `createSqliteEventLogBackend`, protocol types, logger, UUID
+- `event-sourced-drizzle/sqlite` — `defineOutboxTable`, `defineInboxTable`, `createSQLiteAdapter`
 - `event-sourced-drizzle/pg` — Postgres/PGlite equivalents
+- `event-sourced-drizzle/react` — `useManualSync`, `useSyncEnabled`, `formatManualSyncMessage`
 
 ## Server Compatibility
 
@@ -268,7 +273,7 @@ The wire protocol (`OutboundEvent`, `ServerEvent`, `PushResponse`, `PullResponse
 
 ## Status
 
-The internal pipeline (push, pull, replay, retry, dead-letter, hooks) is implemented. The `DrizzleAdapter` interface is defined but reference adapter implementations for SQLite and Postgres are not yet provided — you implement it against your Drizzle instance for now. A `createSQLiteAdapter` / `createPgAdapter` helper is planned.
+The engine, SQLite/PG adapters, transactional `mutate`, conflict detection (`conflictDetection`), a SQLite event-log test backend (`createSqliteEventLogBackend`), and React helpers (`event-sourced-drizzle/react`) are in place. Reads stay on your Drizzle `db`.
 
 ## Roadmap
 
@@ -278,8 +283,8 @@ The internal pipeline (push, pull, replay, retry, dead-letter, hooks) is impleme
 - [x] Lifecycle hooks
 - [x] Transport normalization (URL/handlers/raw)
 - [x] Logger + structured debug output
-- [ ] Reference `createSQLiteAdapter` / `createPgAdapter` helpers
-- [ ] Full transactional mutate (domain write + outbox in one tx)
-- [ ] React helpers (`useManualSync`, `useSyncEnabled`)
-- [ ] Mock sync backend for testing
-- [ ] Conflict detection + row version tracking
+- [x] Reference `createSQLiteAdapter` / `createPgAdapter` helpers
+- [x] Full transactional mutate (domain write + outbox in one tx)
+- [x] React helpers (`useManualSync`, `useSyncEnabled`)
+- [x] DB-backed sync backend for tests (push/pull against a second database)
+- [x] Conflict detection + row version tracking

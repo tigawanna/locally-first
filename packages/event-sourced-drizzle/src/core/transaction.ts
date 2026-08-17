@@ -139,8 +139,9 @@ export function createTransact(deps: {
   emit: EmitHook;
   log: EventSourcedLogger;
   optimistic?: OptimisticStateTracker;
+  onCommitted?: (entries: TransactionEntry[]) => Promise<void>;
 }): TransactFn {
-  const { adapter, emit, log, optimistic } = deps;
+  const { adapter, emit, log, optimistic, onCommitted } = deps;
 
   return function transact(options?: TransactOptions) {
     const txId = options?.txId ?? generateEventId();
@@ -183,6 +184,8 @@ export function createTransact(deps: {
                 attemptCount: 0,
               });
             }
+
+            await onCommitted?.(tx.entries);
 
             log.debug("transact committed", { txId, mutations: tx.entries.length });
           } else {

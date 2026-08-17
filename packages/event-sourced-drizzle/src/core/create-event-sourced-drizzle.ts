@@ -33,6 +33,7 @@ import type {
 import type { EventSourcedLogger } from "../utils/logger";
 import { createEventSourcedLogger } from "../utils/logger";
 import { generateEventId } from "../utils/uuid";
+import { pendingRowVersion, readRowVersion, writeRowVersion } from "../internal/row-versions";
 
 function emptyResult(overrides: Partial<SyncResult> = {}): SyncResult {
   return {
@@ -92,6 +93,8 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
   const eventSchemaVersion = config.eventSchemaVersion ?? DEFAULT_EVENT_SCHEMA_VERSION;
   const pushBatchSize = Math.max(1, config.pushBatchSize ?? DEFAULT_PUSH_BATCH_SIZE);
   const backendMismatch = config.backendMismatch ?? "resetCursor";
+  const conflictDetection = config.conflictDetection ?? false;
+  const syncEnabledListeners = new Set<(enabled: boolean) => void>();
 
   const retry: ResolvedRetryConfig = {
     maxAttempts: Math.max(1, config.retry?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS),
@@ -125,6 +128,7 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
     eventSchemaVersion,
     upcastEvent: config.upcastEvent,
     maxReplayAttempts: retry.maxAttempts,
+    conflictDetection,
     emit,
     log,
   };
@@ -159,6 +163,7 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
     txId: string;
     timestamp: number;
     localSeq: number;
+    baseVersion: string | null;
   }): OutboxRow {
     return {
       eventId: params.eventId,
@@ -170,7 +175,7 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
       txId: params.txId,
       clientId,
       schemaVersion: eventSchemaVersion,
-      baseVersion: null,
+      baseVersion: params.baseVersion,
       timestamp: params.timestamp,
       localSeq: params.localSeq,
       globalSeq: null,
@@ -183,6 +188,21 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
       lastErrorCode: null,
       retryable: null,
     };
+  }
+
+  async function resolveBaseVersion(collectionId: string, key: string): Promise<string | null> {
+    if (!conflictDetection) return null;
+    const ambientTx = getActiveTransactionImpl();
+    if (ambientTx) {
+      const pending = pendingRowVersion(ambientTx, collectionId, key);
+      if (pending) return pending;
+    }
+    return readRowVersion(adapter, collectionId, key);
+  }
+
+  async function stampVersion(collectionId: string, key: string, eventId: string): Promise<void> {
+    if (!conflictDetection) return;
+    await writeRowVersion(adapter, collectionId, key, eventId);
   }
 
   const mutate: MutateApi<TCollections> = {
@@ -199,6 +219,7 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
       // Check for ambient transaction
       const ambientTx = getActiveTransactionImpl();
       const txId = ambientTx ? ambientTx.id : generateEventId();
+      const baseVersion = await resolveBaseVersion(collectionId, key);
 
       const outboxRow = buildOutboxRow({
         eventId,
@@ -210,6 +231,7 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
         txId,
         timestamp: now,
         localSeq: seq,
+        baseVersion,
       });
 
       if (ambientTx) {
@@ -223,6 +245,7 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
           await adapter.domainInsert(collectionId, payload);
           await adapter.insertOutbox(outboxRow);
         });
+        await stampVersion(collectionId, key, eventId);
 
         optimistic.track({
           eventId,
@@ -250,6 +273,7 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
       // Check for ambient transaction
       const ambientTx = getActiveTransactionImpl();
       const txId = ambientTx ? ambientTx.id : generateEventId();
+      const baseVersion = await resolveBaseVersion(collectionId, String(key));
 
       const outboxRow = buildOutboxRow({
         eventId,
@@ -261,6 +285,7 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
         txId,
         timestamp: now,
         localSeq: seq,
+        baseVersion,
       });
 
       if (ambientTx) {
@@ -273,6 +298,7 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
           await adapter.domainUpdate(collectionId, key as string | number, payload);
           await adapter.insertOutbox(outboxRow);
         });
+        await stampVersion(collectionId, String(key), eventId);
 
         optimistic.track({
           eventId,
@@ -299,6 +325,7 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
       // Check for ambient transaction
       const ambientTx = getActiveTransactionImpl();
       const txId = ambientTx ? ambientTx.id : generateEventId();
+      const baseVersion = await resolveBaseVersion(collectionId, String(key));
 
       const outboxRow = buildOutboxRow({
         eventId,
@@ -310,6 +337,7 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
         txId,
         timestamp: now,
         localSeq: seq,
+        baseVersion,
       });
 
       if (ambientTx) {
@@ -322,6 +350,7 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
           await adapter.domainDelete(collectionId, key as string | number);
           await adapter.insertOutbox(outboxRow);
         });
+        await stampVersion(collectionId, String(key), eventId);
 
         optimistic.track({
           eventId,
@@ -364,6 +393,7 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
           now: Date.now(),
           emit,
           log,
+          conflictDetection,
         });
         pushed += outcome.pushed;
         deadLettered += outcome.deadLettered;
@@ -471,7 +501,21 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
 
   // --- Transact ---
 
-  const transact = createTransact({ adapter, emit, log, optimistic });
+  const transact = createTransact({
+    adapter,
+    emit,
+    log,
+    optimistic,
+    onCommitted: async (entries) => {
+      for (const entry of entries) {
+        await stampVersion(
+          entry.outboxRow.collectionId,
+          entry.outboxRow.key,
+          entry.outboxRow.eventId,
+        );
+      }
+    },
+  });
 
   return {
     mutate,
@@ -483,6 +527,13 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
     setSyncEnabled: (enabled: boolean) => {
       syncEnabled = enabled;
       log.info("sync enabled changed", { syncEnabled: enabled });
+      for (const listener of syncEnabledListeners) listener(enabled);
+    },
+    subscribeSyncEnabled: (listener) => {
+      syncEnabledListeners.add(listener);
+      return () => {
+        syncEnabledListeners.delete(listener);
+      };
     },
     dispose: () => {
       optimistic.clear();

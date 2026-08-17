@@ -1,4 +1,5 @@
 import { DEFAULT_EVENT_SCHEMA_VERSION } from "./constants";
+import { writeRowVersion } from "./row-versions";
 import type {
   DeadLetterRow,
   DrizzleAdapter,
@@ -110,6 +111,10 @@ export async function replayEvent(
       message: error.message,
     });
     return { status: "failed", error };
+  }
+
+  if (context.conflictDetection) {
+    await writeRowVersion(context.adapter, collectionId, key, eventId);
   }
 
   log.info("replay mutation accepted", { eventId, collectionId, type, key });
