@@ -1,11 +1,11 @@
 import { integer, text } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 
-import { defineInboxTable, defineOutboxTable } from "../schema/sqlite";
+import { defineInboxTable, defineOutboxTable } from "../../schema/sqlite";
 import {
   defineInboxTable as definePgInboxTable,
   defineOutboxTable as definePgOutboxTable,
-} from "../schema/pg";
+} from "../../schema/pg";
 
 describe("sqlite schema builders", () => {
   it("builds a default outbox / inbox table", () => {

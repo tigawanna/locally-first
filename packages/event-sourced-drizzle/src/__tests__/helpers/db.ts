@@ -156,7 +156,7 @@ export async function createSqliteTestContext(
 
   // better-sqlite3's transaction() rejects async callbacks. Since all SQLite operations
   // are synchronous in practice, we use raw BEGIN/COMMIT/ROLLBACK for the adapter.
-  const originalTransaction = db.transaction;
+
   db.transaction = async <T>(fn: (tx: any) => Promise<T>): Promise<T> => {
     sqlite.exec("BEGIN");
     try {
@@ -432,7 +432,7 @@ export async function createPgliteTestContext(
   const ctx: TestContext = {
     engine,
     adapter,
-    rawQuery: <T>(_query: string) => {
+    rawQuery: (_query: string) => {
       throw new Error("Use rawQueryAsync for PGlite");
     },
     cleanup: async () => {
