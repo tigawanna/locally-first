@@ -12,56 +12,115 @@ npm install event-sourced-drizzle drizzle-orm
 
 ## Quick Start (SQLite)
 
-```ts
-import { text, integer, sqliteTable } from "drizzle-orm/sqlite-core";
-import { createEventSourcedDrizzle } from "event-sourced-drizzle";
-import { defineOutboxTable, defineInboxTable } from "event-sourced-drizzle/sqlite";
+Schema, adapter, mutate, and Drizzle reads — same pattern as [`examples/sqlite.ts`](./examples/sqlite.ts).
 
-// --- Schema ---
+```ts
+import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { createEventSourcedDrizzle } from "event-sourced-drizzle";
+import {
+  createSQLiteAdapter,
+  defineDeadLetterTable,
+  defineInboxTable,
+  defineOutboxTable,
+  defineSyncMetaTable,
+} from "event-sourced-drizzle/sqlite";
+
+export const todos = sqliteTable("todos", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  status: text("status").$type<"pending" | "complete">().notNull().default("pending"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
 
 export const outbox = defineOutboxTable("sync_outbox", {
   deviceId: text("device_id"),
-  priority: integer("priority").default(0),
 });
 
 export const inbox = defineInboxTable("sync_inbox", {
   receivedAt: integer("received_at"),
 });
 
-export const todos = sqliteTable("todos", {
-  id: text("id").primaryKey(),
-  title: text("title").notNull(),
-  updatedAt: integer("updated_at").notNull(),
-});
+export const syncMeta = defineSyncMetaTable("sync_meta");
+export const deadLetter = defineDeadLetterTable("sync_dead_letter");
 
-// --- Engine ---
+const sqlite = new Database("app.sqlite");
+const db = drizzle(sqlite, { schema: { todos, outbox, inbox, syncMeta, deadLetter } });
 
 const engine = await createEventSourcedDrizzle({
-  adapter: createSQLiteAdapter(db, { outbox, inbox, todos }),
+  adapter: createSQLiteAdapter(db, {
+    outbox,
+    inbox,
+    syncMeta,
+    deadLetter,
+    collections: {
+      todos: { table: todos, keyColumn: todos.id },
+    },
+  }),
   collections: {
     todos: { table: todos, getKey: (row) => row.id },
   },
-  sync: { pushEvents, pullEvents },
 });
 
-// Mutations: domain write + outbox append in one transaction
+// Writes: engine.mutate (domain row + outbox event in one transaction)
 await engine.mutate.insert("todos", {
   id: crypto.randomUUID(),
   title: "Buy groceries",
+  status: "pending",
+  createdAt: Date.now(),
   updatedAt: Date.now(),
 });
 
-// Sync: push outbox → server, pull server → inbox → replay into tables
-await engine.sync();
+// Reads: your Drizzle instance
+const rows = db.select().from(todos).all();
 ```
+
+**Do not** `db.insert()`, `db.update()`, or `db.delete()` on synced tables. Those skip the outbox, so the change never syncs and a later pull can overwrite it. **Do** query with Drizzle as usual (`select`, joins, aggregates).
+
+better-sqlite3’s Drizzle `transaction` is sync-only. If mutate throws `Transaction function cannot return a promise`, wrap `BEGIN`/`COMMIT` around the adapter like [`examples/sqlite.ts`](./examples/sqlite.ts).
+
+PGlite uses the same engine API with `event-sourced-drizzle/pg` — see [`examples/pglite.ts`](./examples/pglite.ts).
+
+## Migrations
+
+This package does **not** create or migrate tables. You own the schema (`defineOutboxTable`, `defineInboxTable`, domain tables, `sync_meta`, dead-letter) and you apply it with whatever Drizzle pipeline you already use.
+
+**Node / servers:** drizzle-kit as usual — `drizzle-kit generate`, then `migrate()` from `drizzle-orm/*/migrator`, or `drizzle-kit push` in development.
+
+**Browser / Vite local-first:** drizzle-kit cannot run in the browser. Generate SQL with drizzle-kit, then apply those files at runtime. [proj-airi/drizzle-orm-browser](https://github.com/proj-airi/drizzle-orm-browser) bundles journaled migrations into `virtual:drizzle-migrations.sql` and applies them with a browser migrator (PGlite, SQLite, DuckDB WASM):
+
+```ts
+import { migrate } from "@proj-airi/drizzle-orm-browser-migrator/pglite";
+import { drizzle } from "drizzle-orm/pglite";
+import migrations from "virtual:drizzle-migrations.sql";
+
+const db = drizzle({ client: pgLite });
+await migrate(db, migrations);
+```
+
+Create the engine only after migrations have succeeded. Outbox, inbox, sync meta, dead-letter, and every domain table the adapter registers must exist first.
+
+## Examples
+
+Runnable copies live in [`examples/`](./examples):
+
+| File                                         | Dialect           |
+| -------------------------------------------- | ----------------- |
+| [`examples/sqlite.ts`](./examples/sqlite.ts) | better-sqlite3    |
+| [`examples/pglite.ts`](./examples/pglite.ts) | PGlite (Postgres) |
+
+```bash
+pnpm --filter event-sourced-drizzle example:sqlite
+pnpm --filter event-sourced-drizzle example:pglite
+```
+
+Generate migrations with `example:generate:sqlite` / `example:generate:pglite`. See [`examples/README.md`](./examples/README.md).
 
 ## Postgres / PGlite
 
-```ts
-import { defineOutboxTable, defineInboxTable } from "event-sourced-drizzle/pg";
-```
-
-Same API; column types use `jsonb` / `boolean` / `bigint` as appropriate.
+Same engine and `mutate` / Drizzle-read split. Import schema helpers and `createPgAdapter` from `event-sourced-drizzle/pg` (jsonb / boolean / bigint). Full wiring is in [`examples/pglite.ts`](./examples/pglite.ts).
 
 ## Architecture
 
