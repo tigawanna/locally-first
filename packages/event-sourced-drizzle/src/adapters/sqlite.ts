@@ -96,6 +96,10 @@ export function createSQLiteAdapter(db: SQLiteDb, config: SQLiteAdapterConfig): 
       await db.delete(outbox).where(eq(outbox.eventId, eventId));
     },
 
+    async insertOutbox(row: OutboxRow): Promise<void> {
+      await db.insert(outbox).values(row);
+    },
+
     async insertDeadLetter(row: DeadLetterRow): Promise<void> {
       await db.insert(deadLetter).values(row);
     },

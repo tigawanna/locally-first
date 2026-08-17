@@ -4,31 +4,35 @@ import {
   DEFAULT_MAX_ATTEMPTS,
   DEFAULT_MAX_DELAY_MS,
   DEFAULT_PUSH_BATCH_SIZE,
-} from "./internal/constants";
-import { createHookEmitter } from "./internal/hooks";
-import type { EmitHook, ManualSyncResult, SyncResult } from "./internal/hooks";
-import { pullInbox } from "./internal/pull";
-import { pushOutbox } from "./internal/push";
-import { replayInbox } from "./internal/replay";
-import { createSerialQueue } from "./internal/serial-queue";
-import { readPullCursor, resolveClientId, writeSyncOutcome } from "./internal/sync-meta";
+} from "../internal/constants";
+import { createHookEmitter } from "../internal/hooks";
+import type { EmitHook, ManualSyncResult, SyncResult } from "../internal/hooks";
+import { pullInbox } from "../internal/pull";
+import { pushOutbox } from "../internal/push";
+import { replayInbox } from "../internal/replay";
+import { createSerialQueue } from "../internal/serial-queue";
+import { readPullCursor, resolveClientId, writeSyncOutcome } from "../internal/sync-meta";
 import type {
   DrizzleAdapter,
   OutboxRow,
   ReplayContext,
   ResolvedRetryConfig,
-} from "./internal/types";
+} from "../internal/types";
 import { createSyncTransport } from "./sync";
 import type { NormalizedSyncTransport } from "./sync";
+import { createTransact, getActiveTransactionImpl } from "./transaction";
+import type { TransactFn } from "./transaction";
+import { createOptimisticStateTracker } from "./optimistic-state";
+import type { OptimisticStateTracker } from "./optimistic-state";
 import type {
   CollectionMap,
   EventSourcedDrizzle,
   EventSourcedDrizzleConfig,
   MutateApi,
 } from "./types";
-import type { EventSourcedLogger } from "./utils/logger";
-import { createEventSourcedLogger } from "./utils/logger";
-import { generateEventId } from "./utils/uuid";
+import type { EventSourcedLogger } from "../utils/logger";
+import { createEventSourcedLogger } from "../utils/logger";
+import { generateEventId } from "../utils/uuid";
 
 function emptyResult(overrides: Partial<SyncResult> = {}): SyncResult {
   return {
@@ -49,6 +53,29 @@ function emptyResult(overrides: Partial<SyncResult> = {}): SyncResult {
  * through `mutate` so outbox append stays atomic with the domain write.
  *
  * @param config — See {@link EventSourcedDrizzleConfig} for every option.
+ *
+ * @example
+ * ```ts
+ * import { createEventSourcedDrizzle } from "event-sourced-drizzle"
+ * import { createSQLiteAdapter } from "event-sourced-drizzle/sqlite"
+ *
+ * const adapter = createSQLiteAdapter(db, {
+ *   outbox,
+ *   inbox,
+ *   syncMeta,
+ *   deadLetter,
+ *   collections: { todos: { table: todos, keyColumn: todos.id } },
+ * })
+ *
+ * const engine = await createEventSourcedDrizzle({
+ *   adapter,
+ *   collections: { todos: { table: todos, getKey: (row) => row.id } },
+ *   sync: { pushUrl: "/api/sync/events", pullUrl: "/api/sync/events" },
+ * })
+ *
+ * await engine.mutate.insert("todos", { id: "1", title: "Buy milk", done: false })
+ * await engine.sync()
+ * ```
  */
 export async function createEventSourcedDrizzle<const TCollections extends CollectionMap>(
   config: EventSourcedDrizzleConfig<TCollections>,
@@ -111,6 +138,9 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
   // Serial queue prevents overlapping sync cycles within this JS context.
   const runExclusive = createSerialQueue();
 
+  // Optimistic state tracker — tracks pending local mutations in memory.
+  const optimistic: OptimisticStateTracker = createOptimisticStateTracker();
+
   // --- Mutate API ---
 
   let localSeq = Date.now();
@@ -163,9 +193,12 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
       const key = String(def.getKey(row as never));
       const payload = row as Record<string, unknown>;
       const eventId = generateEventId();
-      const txId = generateEventId();
       const now = Date.now();
       const seq = nextLocalSeq();
+
+      // Check for ambient transaction
+      const ambientTx = getActiveTransactionImpl();
+      const txId = ambientTx ? ambientTx.id : generateEventId();
 
       const outboxRow = buildOutboxRow({
         eventId,
@@ -179,16 +212,30 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
         localSeq: seq,
       });
 
-      await adapter.transaction(async () => {
-        await adapter.domainInsert(collectionId, payload);
-        // insertInbox is reused here for outbox — the adapter maps the call
-        // to the appropriate table. A dedicated insertOutbox method would be
-        // cleaner; for now we cast to satisfy the interface.
-        await adapter.insertInbox(outboxRow as never);
-      });
+      if (ambientTx) {
+        // Defer execution — the ambient transaction will commit everything together.
+        ambientTx.addEntry({
+          outboxRow,
+          domainOp: () => adapter.domainInsert(collectionId, payload),
+        });
+      } else {
+        await adapter.transaction(async () => {
+          await adapter.domainInsert(collectionId, payload);
+          await adapter.insertOutbox(outboxRow);
+        });
 
-      log.debug("mutate insert", { collectionId, key, eventId });
-      emit("onMutation", outboxRow);
+        optimistic.track({
+          eventId,
+          collectionId,
+          type: "insert",
+          key,
+          syncStatus: "pending",
+          timestamp: now,
+          attemptCount: 0,
+        });
+        log.debug("mutate insert", { collectionId, key, eventId });
+        emit("onMutation", outboxRow);
+      }
     },
 
     async update(collectionId, key, patch) {
@@ -197,9 +244,12 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
 
       const payload = patch as Record<string, unknown>;
       const eventId = generateEventId();
-      const txId = generateEventId();
       const now = Date.now();
       const seq = nextLocalSeq();
+
+      // Check for ambient transaction
+      const ambientTx = getActiveTransactionImpl();
+      const txId = ambientTx ? ambientTx.id : generateEventId();
 
       const outboxRow = buildOutboxRow({
         eventId,
@@ -213,13 +263,29 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
         localSeq: seq,
       });
 
-      await adapter.transaction(async () => {
-        await adapter.domainUpdate(collectionId, key as string | number, payload);
-        await adapter.insertInbox(outboxRow as never);
-      });
+      if (ambientTx) {
+        ambientTx.addEntry({
+          outboxRow,
+          domainOp: () => adapter.domainUpdate(collectionId, key as string | number, payload),
+        });
+      } else {
+        await adapter.transaction(async () => {
+          await adapter.domainUpdate(collectionId, key as string | number, payload);
+          await adapter.insertOutbox(outboxRow);
+        });
 
-      log.debug("mutate update", { collectionId, key: String(key), eventId });
-      emit("onMutation", outboxRow);
+        optimistic.track({
+          eventId,
+          collectionId,
+          type: "update",
+          key: String(key),
+          syncStatus: "pending",
+          timestamp: now,
+          attemptCount: 0,
+        });
+        log.debug("mutate update", { collectionId, key: String(key), eventId });
+        emit("onMutation", outboxRow);
+      }
     },
 
     async delete(collectionId, key) {
@@ -227,9 +293,12 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
       if (!def) throw new Error(`Unknown collection: ${collectionId}`);
 
       const eventId = generateEventId();
-      const txId = generateEventId();
       const now = Date.now();
       const seq = nextLocalSeq();
+
+      // Check for ambient transaction
+      const ambientTx = getActiveTransactionImpl();
+      const txId = ambientTx ? ambientTx.id : generateEventId();
 
       const outboxRow = buildOutboxRow({
         eventId,
@@ -243,13 +312,29 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
         localSeq: seq,
       });
 
-      await adapter.transaction(async () => {
-        await adapter.domainDelete(collectionId, key as string | number);
-        await adapter.insertInbox(outboxRow as never);
-      });
+      if (ambientTx) {
+        ambientTx.addEntry({
+          outboxRow,
+          domainOp: () => adapter.domainDelete(collectionId, key as string | number),
+        });
+      } else {
+        await adapter.transaction(async () => {
+          await adapter.domainDelete(collectionId, key as string | number);
+          await adapter.insertOutbox(outboxRow);
+        });
 
-      log.debug("mutate delete", { collectionId, key: String(key), eventId });
-      emit("onMutation", outboxRow);
+        optimistic.track({
+          eventId,
+          collectionId,
+          type: "delete",
+          key: String(key),
+          syncStatus: "pending",
+          timestamp: now,
+          attemptCount: 0,
+        });
+        log.debug("mutate delete", { collectionId, key: String(key), eventId });
+        emit("onMutation", outboxRow);
+      }
     },
   };
 
@@ -384,8 +469,14 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
     });
   }
 
+  // --- Transact ---
+
+  const transact = createTransact({ adapter, emit, log, optimistic });
+
   return {
     mutate,
+    transact,
+    optimistic,
     sync,
     manualSync,
     getSyncEnabled: () => syncEnabled,
@@ -394,6 +485,7 @@ export async function createEventSourcedDrizzle<const TCollections extends Colle
       log.info("sync enabled changed", { syncEnabled: enabled });
     },
     dispose: () => {
+      optimistic.clear();
       log.info("engine disposed");
     },
   };

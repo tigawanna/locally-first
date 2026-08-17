@@ -44,6 +44,39 @@ const NOOP_LOGGER: EventSourcedLogger = {
   error() {},
 };
 
+/**
+ * Builds the logger used internally when you pass `debug` to
+ * {@link createEventSourcedDrizzle}. `false` / omitted is a no-op logger;
+ * `true` logs to `console`; an object is used as-is.
+ *
+ * @example
+ * ```ts
+ * import { createEventSourcedDrizzle, createEventSourcedLogger } from "event-sourced-drizzle"
+ *
+ * const debug = createEventSourcedLogger(true)
+ *
+ * const engine = await createEventSourcedDrizzle({
+ *   adapter,
+ *   collections,
+ *   debug,
+ * })
+ * ```
+ *
+ * @example Custom sink
+ * ```ts
+ * import { createEventSourcedLogger } from "event-sourced-drizzle"
+ * import type { EventSourcedLogger } from "event-sourced-drizzle"
+ *
+ * const logger: EventSourcedLogger = {
+ *   debug: (message, data) => console.debug(message, data),
+ *   info: (message, data) => console.info(message, data),
+ *   warn: (message, data) => console.warn(message, data),
+ *   error: (message, data) => console.error(message, data),
+ * }
+ *
+ * createEventSourcedLogger(logger)
+ * ```
+ */
 export function createEventSourcedLogger(
   config?: boolean | EventSourcedLogger,
 ): EventSourcedLogger {

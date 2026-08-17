@@ -1,4 +1,4 @@
-import type { NormalizedSyncTransport, PullResponse, ServerEvent } from "../sync";
+import type { NormalizedSyncTransport, PullResponse, ServerEvent } from "../core/sync";
 import type { EventSourcedLogger } from "../utils/logger";
 import type { EmitHook, BackendMismatchPolicy } from "./hooks";
 import type { DrizzleAdapter, InboxRow, ReplayContext } from "./types";
@@ -12,6 +12,21 @@ export type PullOutcome = {
   requeued: number;
 };
 
+/**
+ * Thrown when `backendMismatch` is `"fail"` and the server reports a different
+ * `backendId` than this client last synced with (wiped or swapped event store).
+ *
+ * @example
+ * ```ts
+ * import { BackendMismatchError } from "event-sourced-drizzle"
+ *
+ * const result = await engine.sync()
+ * const mismatch = result.errors.find((error) => error instanceof BackendMismatchError)
+ * if (mismatch) {
+ *   console.error("backend changed", mismatch.expected, mismatch.received)
+ * }
+ * ```
+ */
 export class BackendMismatchError extends Error {
   constructor(
     readonly expected: string | null,

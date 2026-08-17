@@ -1,4 +1,4 @@
-import type { NormalizedSyncTransport } from "../sync";
+import type { NormalizedSyncTransport } from "../core/sync";
 import type { EventSourcedLogger } from "../utils/logger";
 import type { EmitHook } from "./hooks";
 import { CONFLICT_ERROR_CODE } from "./constants";
@@ -9,7 +9,7 @@ import type {
   OutboxRow,
   ResolvedRetryConfig,
 } from "./types";
-import type { OutboundEvent, PushFailure, PushResponse } from "../sync";
+import type { OutboundEvent, PushFailure, PushResponse } from "../core/sync";
 
 export type PushOutcome = {
   pushed: number;

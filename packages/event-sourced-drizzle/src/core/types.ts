@@ -4,7 +4,7 @@ import type {
   EventSourcedHooks,
   ManualSyncResult,
   SyncResult,
-} from "./internal/hooks";
+} from "../internal/hooks";
 import type {
   DeadLetterReason,
   DeadLetterRow,
@@ -14,8 +14,10 @@ import type {
   OutboxRow,
   OutboxSyncStatus,
   UpcastEventFn,
-} from "./internal/types";
-import type { EventSourcedLogger } from "./utils/logger";
+} from "../internal/types";
+import type { EventSourcedLogger } from "../utils/logger";
+import type { TransactFn } from "./transaction";
+import type { OptimisticStateTracker } from "./optimistic-state";
 
 // Re-exports for public API.
 export type {
@@ -145,6 +147,31 @@ export type MutateApi<TCollections extends CollectionMap> = {
 export type EventSourcedDrizzle<TCollections extends CollectionMap> = {
   /** Typed mutate API — writes domain table + appends outbox atomically. */
   mutate: MutateApi<TCollections>;
+  /**
+   * Group multiple mutations into a single atomic transaction.
+   * All mutations inside `transact().run(...)` share a txId and commit together.
+   *
+   * @example
+   * ```ts
+   * const { run } = engine.transact()
+   * await run(async () => {
+   *   await engine.mutate.insert("todos", { id: "1", text: "Buy milk" })
+   *   await engine.mutate.update("counters", "main", { count: 5 })
+   * })
+   * ```
+   */
+  transact: TransactFn;
+  /**
+   * In-memory tracker for optimistic (pending sync) mutations.
+   * Use to check pending state, subscribe to changes, or get a summary.
+   *
+   * @example
+   * ```ts
+   * engine.optimistic.isPending("todos", "todo-1")
+   * engine.optimistic.subscribe(() => updateUI())
+   * ```
+   */
+  optimistic: OptimisticStateTracker;
   /** Push + pull sync cycle. */
   sync: () => Promise<SyncResult>;
   /** Push + pull + replay any pending inbox. */

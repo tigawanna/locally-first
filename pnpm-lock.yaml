@@ -100,7 +100,7 @@ importers:
         version: 5.5.23
       drizzle-orm:
         specifier: ^0.45.2
-        version: 0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2)
+        version: 0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2)
       embla-carousel-react:
         specifier: ^8.6.0
         version: 8.6.0(react@19.2.7)
@@ -109,7 +109,7 @@ importers:
         version: link:../../packages/event-sourced-collection
       evlog:
         specifier: ^2.19.2
-        version: 2.19.2(@tanstack/start-client-core@1.168.2)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(hono@4.12.26)(nitro@3.0.260415-beta(@libsql/client@0.14.0)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))(jiti@2.7.0)(lru-cache@11.5.1))(ofetch@2.0.0-alpha.3)(react@19.2.7)
+        version: 2.19.2(@tanstack/start-client-core@1.168.2)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(hono@4.12.26)(nitro@3.0.260415-beta(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))(jiti@2.7.0)(lru-cache@11.5.1))(ofetch@2.0.0-alpha.3)(react@19.2.7)
       input-otp:
         specifier: ^1.4.2
         version: 1.4.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -121,7 +121,7 @@ importers:
         version: 12.40.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       nitro:
         specifier: 3.0.260415-beta
-        version: 3.0.260415-beta(@libsql/client@0.14.0)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))(jiti@2.7.0)(lru-cache@11.5.1)
+        version: 3.0.260415-beta(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))(jiti@2.7.0)(lru-cache@11.5.1)
       radix-ui:
         specifier: ^1.4.3
         version: 1.6.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -275,7 +275,7 @@ importers:
         version: 5.5.23
       drizzle-orm:
         specifier: ^0.45.2
-        version: 0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2)
+        version: 0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2)
       embla-carousel-react:
         specifier: ^8.6.0
         version: 8.6.0(react@19.2.7)
@@ -284,7 +284,7 @@ importers:
         version: link:../../packages/event-sourced-collection
       evlog:
         specifier: ^2.19.2
-        version: 2.19.2(@tanstack/start-client-core@1.168.2)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(hono@4.12.26)(nitro@3.0.260415-beta(@libsql/client@0.14.0)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))(jiti@2.7.0)(lru-cache@11.5.1))(ofetch@2.0.0-alpha.3)(react@19.2.7)
+        version: 2.19.2(@tanstack/start-client-core@1.168.2)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(hono@4.12.26)(nitro@3.0.260415-beta(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))(jiti@2.7.0)(lru-cache@11.5.1))(ofetch@2.0.0-alpha.3)(react@19.2.7)
       input-otp:
         specifier: ^1.4.2
         version: 1.4.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -296,7 +296,7 @@ importers:
         version: 12.40.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       nitro:
         specifier: 3.0.260415-beta
-        version: 3.0.260415-beta(@libsql/client@0.14.0)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))(jiti@2.7.0)(lru-cache@11.5.1)
+        version: 3.0.260415-beta(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))(jiti@2.7.0)(lru-cache@11.5.1)
       radix-ui:
         specifier: ^1.4.3
         version: 1.6.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -471,12 +471,21 @@ importers:
       '@arethetypeswrong/cli':
         specifier: ^0.18.4
         version: 0.18.4
+      '@electric-sql/pglite':
+        specifier: ^0.5.5
+        version: 0.5.5
       '@repo/typescript-config':
         specifier: workspace:*
         version: link:../typescript-config
+      '@types/better-sqlite3':
+        specifier: ^9.6.0
+        version: 9.6.0
+      better-sqlite3:
+        specifier: ^13.0.3
+        version: 13.0.3
       drizzle-orm:
         specifier: ^0.45.2
-        version: 0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2)
+        version: 0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2)
       tsdown:
         specifier: ^0.22.3
         version: 0.22.3(@arethetypeswrong/core@0.18.4)(@typescript/native-preview@7.0.0-dev.20260519.1)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)
@@ -485,7 +494,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: 4.1.9
-        version: 4.1.9(@types/node@22.20.0)(vite@8.0.16(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+        version: 4.1.9(@types/node@22.20.0)(@vitest/browser-preview@4.1.10)(vite@8.0.16(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
 
   packages/typescript-config: {}
 
@@ -1011,6 +1020,9 @@ packages:
 
   '@drizzle-team/brocli@0.10.2':
     resolution: {integrity: sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==}
+
+  '@electric-sql/pglite@0.5.5':
+    resolution: {integrity: sha512-QeZ+oB7QaU4EJj2awrB8hwFZ5TXxLRBQ9Gfq0dQauYDdWsRtuWRCERgtri35vRfL07KQHlVlc/4Qxvn7a5AXeA==}
 
   '@emnapi/core@1.10.0':
     resolution: {integrity: sha512-yq6OkJ4p82CAfPl0u9mQebQHKPJkY7WrIuk205cTYnYe+k2Z8YBh11FrbRG/H6ihirqcacOgl2BIO8oyMQLeXw==}
@@ -7724,6 +7736,8 @@ snapshots:
 
   '@drizzle-team/brocli@0.10.2': {}
 
+  '@electric-sql/pglite@0.5.5': {}
+
   '@emnapi/core@1.10.0':
     dependencies:
       '@emnapi/wasi-threads': 1.2.1
@@ -11111,11 +11125,12 @@ snapshots:
 
   dayjs@1.11.21: {}
 
-  db0@0.3.4(@libsql/client@0.14.0)(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2)):
+  db0@0.3.4(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2)):
     optionalDependencies:
+      '@electric-sql/pglite': 0.5.5
       '@libsql/client': 0.14.0
       better-sqlite3: 13.0.3
-      drizzle-orm: 0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2)
+      drizzle-orm: 0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2)
 
   debug@2.6.9:
     dependencies:
@@ -11199,8 +11214,9 @@ snapshots:
       esbuild: 0.27.7
       tsx: 4.22.4
 
-  drizzle-orm@0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2):
+  drizzle-orm@0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2):
     optionalDependencies:
+      '@electric-sql/pglite': 0.5.5
       '@libsql/client': 0.14.0
       '@op-engineering/op-sqlite': 15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7)
       '@types/better-sqlite3': 9.6.0
@@ -11327,11 +11343,11 @@ snapshots:
 
   eventemitter3@4.0.7: {}
 
-  evlog@2.19.2(@tanstack/start-client-core@1.168.2)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(hono@4.12.26)(nitro@3.0.260415-beta(@libsql/client@0.14.0)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))(jiti@2.7.0)(lru-cache@11.5.1))(ofetch@2.0.0-alpha.3)(react@19.2.7):
+  evlog@2.19.2(@tanstack/start-client-core@1.168.2)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(hono@4.12.26)(nitro@3.0.260415-beta(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))(jiti@2.7.0)(lru-cache@11.5.1))(ofetch@2.0.0-alpha.3)(react@19.2.7):
     optionalDependencies:
       '@tanstack/start-client-core': 1.168.2
       hono: 4.12.26
-      nitro: 3.0.260415-beta(@libsql/client@0.14.0)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))(jiti@2.7.0)(lru-cache@11.5.1)
+      nitro: 3.0.260415-beta(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))(jiti@2.7.0)(lru-cache@11.5.1)
       ofetch: 2.0.0-alpha.3
       react: 19.2.7
       vite: '@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0)'
@@ -12225,11 +12241,11 @@ snapshots:
 
   nf3@0.3.17: {}
 
-  nitro@3.0.260415-beta(@libsql/client@0.14.0)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))(jiti@2.7.0)(lru-cache@11.5.1):
+  nitro@3.0.260415-beta(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))(jiti@2.7.0)(lru-cache@11.5.1):
     dependencies:
       consola: 3.4.2
       crossws: 0.4.6(srvx@0.11.17)
-      db0: 0.3.4(@libsql/client@0.14.0)(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))
+      db0: 0.3.4(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))
       env-runner: 0.1.14
       h3: 2.0.1-rc.20(crossws@0.4.6(srvx@0.11.17))
       hookable: 6.1.1
@@ -12240,7 +12256,7 @@ snapshots:
       rolldown: 1.0.3
       srvx: 0.11.17
       unenv: 2.0.0-rc.24
-      unstorage: 2.0.0-alpha.7(db0@0.3.4(@libsql/client@0.14.0)(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2)))(lru-cache@11.5.1)(ofetch@2.0.0-alpha.3)
+      unstorage: 2.0.0-alpha.7(db0@0.3.4(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2)))(lru-cache@11.5.1)(ofetch@2.0.0-alpha.3)
     optionalDependencies:
       jiti: 2.7.0
       vite: '@voidzero-dev/vite-plus-core@0.2.9(@arethetypeswrong/core@0.18.4)(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0)'
@@ -13376,9 +13392,9 @@ snapshots:
       rolldown: 1.0.0-rc.17
     optional: true
 
-  unstorage@2.0.0-alpha.7(db0@0.3.4(@libsql/client@0.14.0)(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2)))(lru-cache@11.5.1)(ofetch@2.0.0-alpha.3):
+  unstorage@2.0.0-alpha.7(db0@0.3.4(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2)))(lru-cache@11.5.1)(ofetch@2.0.0-alpha.3):
     optionalDependencies:
-      db0: 0.3.4(@libsql/client@0.14.0)(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))
+      db0: 0.3.4(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(better-sqlite3@13.0.3)(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.5)(@libsql/client@0.14.0)(@op-engineering/op-sqlite@15.2.14(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(expo-sqlite@55.0.16(expo@56.0.12)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(sql.js@1.14.2))
       lru-cache: 11.5.1
       ofetch: 2.0.0-alpha.3
 
@@ -13637,7 +13653,7 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
-  vitest@4.1.9(@types/node@22.20.0)(vite@8.0.16(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)):
+  vitest@4.1.9(@types/node@22.20.0)(@vitest/browser-preview@4.1.10)(vite@8.0.16(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.9
       '@vitest/mocker': 4.1.9(vite@8.0.16(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
@@ -13661,6 +13677,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 22.20.0
+      '@vitest/browser-preview': 4.1.10(vite@8.0.16(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vitest@4.1.10)
     transitivePeerDependencies:
       - msw
 

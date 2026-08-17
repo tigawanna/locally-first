@@ -1,93 +1,29 @@
-import type { MutationType } from "./internal/types";
+// Wire protocol types — canonical definitions live in protocol.ts.
+// Re-exported here for backward compatibility.
+export type {
+  OutboundEvent,
+  ServerEvent,
+  PushConfirmation,
+  PushFailure,
+  PushResponse,
+  PullResponse,
+  PushEventsFn,
+  PullEventsFn,
+  SyncTransport,
+  SyncUrlConfig,
+  SyncHandlersConfig,
+  NormalizedSyncTransport,
+} from "./protocol";
 
-// --- Wire protocol types (compatible with event-sourced-collection) ---
-
-export type OutboundEvent = {
-  eventId: string;
-  collectionId: string;
-  type: MutationType;
-  key: string | number;
-  payload: Record<string, unknown>;
-  previous: Record<string, unknown> | null;
-  txId: string;
-  clientId: string;
-  schemaVersion: number;
-  baseVersion: string | null;
-  timestamp: number;
-};
-
-export type ServerEvent = {
-  globalSeq: number;
-  eventId: string;
-  collectionId: string;
-  type: MutationType;
-  key: string | number;
-  payload: Record<string, unknown>;
-  previous?: Record<string, unknown> | null;
-  clientId?: string;
-  schemaVersion?: number;
-  timestamp: number;
-  cursor: string;
-  backendId?: string;
-};
-
-export type PushConfirmation = {
-  eventId: string;
-  globalSeq: number;
-};
-
-export type PushFailure = {
-  eventId: string;
-  message: string;
-  code?: string;
-  retryable?: boolean;
-};
-
-export type PushResponse = {
-  confirmed: ReadonlyArray<PushConfirmation>;
-  failed?: ReadonlyArray<PushFailure>;
-};
-
-export type PullResponse = {
-  events: ReadonlyArray<ServerEvent>;
-  cursor: string;
-  hasMore: boolean;
-  backendId?: string;
-};
-
-export type PushEventsFn = (
-  events: ReadonlyArray<OutboundEvent>,
-) => Promise<PushResponse | ReadonlyArray<PushConfirmation>>;
-
-export type PullEventsFn = (params: { since: number }) => Promise<PullResponse>;
-
-export type SyncTransport = {
-  push: PushEventsFn;
-  pull: (since: number) => Promise<PullResponse>;
-};
-
-export type SyncUrlConfig = {
-  push: string;
-  pull: string;
-  headers?:
-    | Record<string, string>
-    | (() => Record<string, string> | Promise<Record<string, string>>);
-};
-
-export type SyncHandlersConfig = {
-  pushEvents?: PushEventsFn;
-  pullEvents?: PullEventsFn;
-  pushUrl?: string;
-  pullUrl?: string;
-  headers?:
-    | Record<string, string>
-    | (() => Record<string, string> | Promise<Record<string, string>>);
-};
-
-export type NormalizedSyncTransport = {
-  push?: PushEventsFn;
-  pull?: (since: number) => Promise<PullResponse>;
-};
+import type {
+  NormalizedSyncTransport,
+  PullResponse,
+  PushEventsFn,
+  PushResponse,
+  SyncHandlersConfig,
+  SyncTransport,
+  SyncUrlConfig,
+} from "./protocol";
 
 // --- Transport normalization ---
 
@@ -144,6 +80,34 @@ function isTransport(
   );
 }
 
+/**
+ * Normalizes `sync` config into push/pull functions. Accepts REST URLs,
+ * custom handler functions, or an already-built {@link SyncTransport}.
+ * Pass the result (or the same config) as `sync` on the engine.
+ *
+ * @example REST endpoints
+ * ```ts
+ * import { createEventSourcedDrizzle, createSyncTransport } from "event-sourced-drizzle"
+ *
+ * const sync = createSyncTransport({
+ *   pushUrl: "/api/sync/events",
+ *   pullUrl: "/api/sync/events",
+ *   headers: () => ({ Authorization: `Bearer ${token}` }),
+ * })
+ *
+ * const engine = await createEventSourcedDrizzle({ adapter, collections, sync })
+ * ```
+ *
+ * @example Custom handlers
+ * ```ts
+ * import { createSyncTransport } from "event-sourced-drizzle"
+ *
+ * const sync = createSyncTransport({
+ *   pushEvents: async (events) => postEvents(events),
+ *   pullEvents: async ({ since }) => getEvents(since),
+ * })
+ * ```
+ */
 export function createSyncTransport(
   config?: SyncHandlersConfig | SyncUrlConfig | SyncTransport,
 ): NormalizedSyncTransport | null {
@@ -184,6 +148,20 @@ export function createSyncTransport(
   return { push, pull };
 }
 
+/**
+ * Thrown when the HTTP push endpoint returns a non-OK status.
+ *
+ * @example
+ * ```ts
+ * import { SyncPushError } from "event-sourced-drizzle"
+ *
+ * const result = await engine.sync()
+ * const pushError = result.errors.find((error) => error instanceof SyncPushError)
+ * if (pushError) {
+ *   console.error(pushError.status, pushError.body)
+ * }
+ * ```
+ */
 export class SyncPushError extends Error {
   constructor(
     public readonly status: number,
@@ -194,6 +172,20 @@ export class SyncPushError extends Error {
   }
 }
 
+/**
+ * Thrown when the HTTP pull endpoint returns a non-OK status.
+ *
+ * @example
+ * ```ts
+ * import { SyncPullError } from "event-sourced-drizzle"
+ *
+ * const result = await engine.sync()
+ * const pullError = result.errors.find((error) => error instanceof SyncPullError)
+ * if (pullError) {
+ *   console.error(pullError.status, pullError.body)
+ * }
+ * ```
+ */
 export class SyncPullError extends Error {
   constructor(
     public readonly status: number,

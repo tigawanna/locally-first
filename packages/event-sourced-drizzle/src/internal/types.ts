@@ -22,6 +22,8 @@ export type DrizzleAdapter = {
   markOutboxSynced: (eventId: string, globalSeq: number) => Promise<void>;
   /** Delete an outbox row (when dead-lettering). */
   deleteOutboxRow: (eventId: string) => Promise<void>;
+  /** Insert an outbox row. */
+  insertOutbox: (row: OutboxRow) => Promise<void>;
   /** Insert a dead-letter row. */
   insertDeadLetter: (row: DeadLetterRow) => Promise<void>;
   /** Insert an inbox row. */
