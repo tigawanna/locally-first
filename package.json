@@ -5,6 +5,7 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "test": "turbo run test",
+    "test:packages": "pnpm --filter event-sourced-collection --filter event-sourced-drizzle --parallel test",
     "lint": "vp lint .",
     "lint:fix": "vp lint --fix .",
     "format": "vp fmt .",
