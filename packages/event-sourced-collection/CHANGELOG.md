@@ -5,6 +5,13 @@ All notable changes to `event-sourced-collection` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.10] - 2026-09-08
+
+### Added
+
+- `recordLocalEchoes` option (default `true`). Set `false` to advance the pull
+  cursor past this device's own events without writing resolved inbox echo rows.
+
 ## [0.0.9] - 2026-09-08
 
 ### Added

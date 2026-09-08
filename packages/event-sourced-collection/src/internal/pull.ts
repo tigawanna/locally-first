@@ -56,12 +56,15 @@ export type PullArgs = {
   pull: NonNullable<NormalizedSyncTransport["pull"]>;
   clientId: string;
   pullOverlap: number;
+  /** When false, local-origin pulls advance the cursor without inbox rows. */
+  recordLocalEchoes: boolean;
   backendMismatch: BackendMismatchPolicy;
   context: ReplayContext;
 };
 
 export async function pullInbox(args: PullArgs): Promise<PullOutcome> {
-  const { outbox, inbox, syncmeta, pull, clientId, pullOverlap, context } = args;
+  const { outbox, inbox, syncmeta, pull, clientId, pullOverlap, recordLocalEchoes, context } =
+    args;
   const { log } = context;
 
   let pulled = 0;
@@ -103,11 +106,14 @@ export async function pullInbox(args: PullArgs): Promise<PullOutcome> {
 
     for (const event of sorted) {
       if (isLocalOrigin(event, outbox, clientId)) {
-        await markInboxEventResolved(inbox, event);
+        if (recordLocalEchoes) {
+          await markInboxEventResolved(inbox, event);
+        }
 
         log.debug("pull skipped: event originated locally", {
           eventId: event.eventId,
           globalSeq: event.globalSeq,
+          recorded: recordLocalEchoes,
         });
         continue;
       }

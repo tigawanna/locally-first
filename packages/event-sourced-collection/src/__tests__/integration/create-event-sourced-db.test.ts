@@ -810,6 +810,31 @@ describe("pull resilience", () => {
     expect(db.collections.todos.get("t1")).toBeUndefined();
     expect(inboxRows(db).find((row) => row.eventId === "pruned-event")?.sync).toBe(true);
   });
+
+  it("omits inbox rows for local-origin pulls when recordLocalEchoes is false", async () => {
+    const db = await createDb({
+      clientId: "device-a",
+      recordLocalEchoes: false,
+      sync: {
+        push: noPush,
+        pull: async (since) => {
+          if (since > 0) return { events: [], cursor: "1", hasMore: false };
+          return {
+            events: [makeServerEvent(1, "t1", "echo-event", { clientId: "device-a" })],
+            cursor: "1",
+            hasMore: false,
+          };
+        },
+      },
+    });
+
+    const result = await db.sync();
+
+    expect(result.pulled).toBe(0);
+    expect(db.collections.todos.get("t1")).toBeUndefined();
+    expect(inboxRows(db).find((row) => row.eventId === "echo-event")).toBeUndefined();
+    expect(db.getSyncStatus().pullCursor).toBe(1);
+  });
 });
 
 describe("concurrent sync", () => {

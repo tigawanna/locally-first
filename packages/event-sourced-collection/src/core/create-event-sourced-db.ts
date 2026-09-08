@@ -159,6 +159,7 @@ export async function createEventSourcedDB<
   const clientId: ClientIdRef = { value: config.clientId ?? generateEventId() };
   const unknownEventHandling = config.unknownEventHandling ?? "skip";
   const pullOverlap = Math.max(0, config.pullOverlap ?? 0);
+  const recordLocalEchoes = config.recordLocalEchoes ?? true;
   const eventSchemaVersion = config.eventSchemaVersion ?? DEFAULT_EVENT_SCHEMA_VERSION;
   const pushBatchSize = Math.max(1, config.pushBatchSize ?? DEFAULT_PUSH_BATCH_SIZE);
   const backendMismatch = config.backendMismatch ?? "resetCursor";
@@ -178,6 +179,7 @@ export async function createEventSourcedDB<
     syncEnabled,
     unknownEventHandling,
     pullOverlap,
+    recordLocalEchoes,
     pushBatchSize,
     backendMismatch,
     conflictDetection,
@@ -390,6 +392,7 @@ export async function createEventSourcedDB<
           pull: transport.pull,
           clientId: clientId.value,
           pullOverlap,
+          recordLocalEchoes,
           backendMismatch,
           context: replayContext,
         });

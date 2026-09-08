@@ -694,6 +694,14 @@ export interface EventSourcedSharedOptions {
    */
   pullOverlap?: number;
   /**
+   * When `true` (default), this device's own events that come back on pull are
+   * written to the inbox as already-resolved rows (echo bookkeeping). Set
+   * `false` to advance the pull cursor without inserting those rows — useful
+   * when an Events UI should not list your own outbox echoes as inbox traffic.
+   * Replay is skipped either way; collections are never double-applied.
+   */
+  recordLocalEchoes?: boolean;
+  /**
    * Version stamped on every newly authored outbox event. Defaults to 1.
    * Bump this when you change a collection's row shape, and provide
    * `upcastEvent` so older events can be migrated (or skipped) on replay.
