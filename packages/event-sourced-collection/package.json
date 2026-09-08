@@ -1,6 +1,6 @@
 {
   "name": "event-sourced-collection",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Event-sourced local-first database built on TanStack DB persistence",
   "keywords": [
     "event-sourcing",

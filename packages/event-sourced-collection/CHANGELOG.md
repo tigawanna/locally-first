@@ -5,6 +5,13 @@ All notable changes to `event-sourced-collection` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.9] - 2026-09-08
+
+### Added
+
+- `useSyncStatus` / `useEnsureDb` on `event-sourced-collection/react`
+- `useManualSync({ db })` so `syncing` follows `subscribeSyncStatus` (load sync + manual)
+
 ## [0.0.7] - 2026-08-09
 
 Reliability-focused release: dead-lettering, backend identity, retries, conflict detection, multi-tab locking, React helpers, and published examples.
