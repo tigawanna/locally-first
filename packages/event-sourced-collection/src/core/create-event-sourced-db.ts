@@ -11,6 +11,7 @@ import {
   RESERVED_IDS,
   ROWVERSIONS_ID,
   SYNCMETA_ID,
+  SYNCMETA_KEY,
   SYNC_LOCK_PREFIX,
 } from "../internal/constants";
 import { createHookEmitter } from "../internal/hooks";
@@ -48,6 +49,8 @@ import type {
   OutboxEntry,
   PruneOptions,
   PruneResult,
+  ResetLocalReplicaOptions,
+  ResetLocalReplicaResult,
   RowVersionEntry,
   SyncMetaEntry,
   SyncPushLimits,
@@ -58,6 +61,17 @@ import type {
 import type { EventSourcedLogger } from "../utils/logger";
 import { createEventSourcedLogger } from "../utils/logger";
 import { generateEventId } from "../utils/uuid";
+
+/**
+ * Thrown by `resetLocalReplica()` while the outbox still holds changes the
+ * server has not accepted. Sync first, or pass `discardPending: true`.
+ */
+export class UnsyncedChangesError extends Error {
+  constructor(readonly pendingCount: number) {
+    super(`${pendingCount} local change(s) have not been pushed yet`);
+    this.name = "UnsyncedChangesError";
+  }
+}
 
 type CollectionDefConstraint = {
   getKey: (state: never) => string | number;
@@ -228,6 +242,10 @@ export async function createEventSourcedDB<
 
   const { outbox, inbox, deadletter, syncmeta, rowversions } = meta;
   const userCollections = {} as CollectionMap<TDefs>;
+  const syncedCollections: Array<{
+    collectionId: string;
+    collection: Collection<Record<string, unknown>, string | number>;
+  }> = [];
   const localOnlyIds = new Set(
     Object.keys(config.collections).filter((id) => config.collections[id]!.localOnly === true),
   );
@@ -263,6 +281,7 @@ export async function createEventSourcedDB<
 
     const collection = config.createCollection(options);
     applyCollectionIndexes(collection, collectionId, def.indexes, log);
+    if (!def.localOnly) syncedCollections.push({ collectionId, collection });
 
     log.debug("registered collection", {
       collectionId,
@@ -760,6 +779,81 @@ export async function createEventSourcedDB<
     });
   }
 
+  function resetLocalReplica(
+    options: ResetLocalReplicaOptions = {},
+  ): Promise<ResetLocalReplicaResult> {
+    const deferred: ResetLocalReplicaResult = {
+      deferred: true,
+      removedRows: 0,
+      discardedPending: 0,
+      clientId: clientId.value,
+    };
+
+    return runExclusive(() =>
+      withLock(async () => {
+        const pending = [...outbox.state.values()].filter((entry) => !entry.sync);
+        if (pending.length > 0 && options.discardPending !== true) {
+          throw new UnsyncedChangesError(pending.length);
+        }
+
+        // acceptMutations is the replay path: it writes the collection and its
+        // persistence without calling onDelete, so no outbox event is authored.
+        let removedRows = 0;
+        for (const { collectionId, collection } of syncedCollections) {
+          const target = replayTargets[collectionId];
+          const rows = [...collection.state.entries()];
+          if (rows.length === 0 || !target?.utils.acceptMutations) continue;
+
+          await target.utils.acceptMutations({
+            mutations: rows.map(([key, row]) => ({
+              mutationId: generateEventId(),
+              type: "delete" as const,
+              key,
+              modified: row,
+              original: row,
+              changes: row,
+              collection: target,
+            })),
+          });
+          removedRows += rows.length;
+        }
+
+        for (const meta of [outbox, inbox, deadletter] as const) {
+          for (const eventId of [...meta.state.keys()]) {
+            await meta.delete(eventId).isPersisted.promise;
+          }
+        }
+        for (const id of [...rowversions.state.keys()]) {
+          await rowversions.delete(id).isPersisted.promise;
+        }
+
+        // Pulled events are skipped when their clientId is ours. A fresh id
+        // makes this device's own history replay like anyone else's.
+        clientId.value = generateEventId();
+        await ensureSyncMeta(syncmeta);
+        await syncmeta.update(SYNCMETA_KEY, (draft) => {
+          draft.clientId = clientId.value;
+          draft.pullCursor = 0;
+          draft.lastError = null;
+        }).isPersisted.promise;
+
+        log.warn("local replica reset", {
+          removedRows,
+          discardedPending: pending.length,
+          clientId: clientId.value,
+        });
+        notifyStatus();
+
+        return {
+          deferred: false,
+          removedRows,
+          discardedPending: pending.length,
+          clientId: clientId.value,
+        };
+      }, deferred),
+    );
+  }
+
   function getSyncEnabled(): boolean {
     return syncEnabled;
   }
@@ -799,6 +893,7 @@ export async function createEventSourcedDB<
       return pushLimits;
     },
     pruneSyncedEvents,
+    resetLocalReplica,
     dispose,
   };
 }

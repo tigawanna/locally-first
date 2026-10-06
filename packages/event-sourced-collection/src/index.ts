@@ -1,4 +1,4 @@
-export { createEventSourcedDB } from "./core/create-event-sourced-db";
+export { createEventSourcedDB, UnsyncedChangesError } from "./core/create-event-sourced-db";
 export { createEventSourcedDBHandle, resolveModules } from "./core/create-event-sourced-db-handle";
 export { createLazySingleton } from "./core/lazy-singleton";
 export { createHttpTransport, SyncPushError, SyncPullError } from "./core/sync";
@@ -48,6 +48,8 @@ export type {
   PersistedCollectionPersistence,
   PruneOptions,
   PruneResult,
+  ResetLocalReplicaOptions,
+  ResetLocalReplicaResult,
   PullEventsFn,
   PullResponse,
   PushConfirmation,

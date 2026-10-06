@@ -583,6 +583,22 @@ export type PruneOptions = {
   keepLast?: number;
 };
 
+export type ResetLocalReplicaOptions = {
+  /** Drop outbox changes the server has not accepted instead of throwing. */
+  discardPending?: boolean;
+};
+
+export type ResetLocalReplicaResult = {
+  /** True when another tab holds the sync lock; nothing was changed. */
+  deferred: boolean;
+  /** User rows removed across synced collections. */
+  removedRows: number;
+  /** Unpushed outbox events that were thrown away (only with `discardPending`). */
+  discardedPending: number;
+  /** The device's new client id. */
+  clientId: string;
+};
+
 export type PruneResult = {
   outbox: number;
   inbox: number;
@@ -865,6 +881,16 @@ export type EventSourcedDB<TDefs extends Record<string, CollectionDefConstraint>
    * rows. Safe because the pull cursor lives in `syncmeta`, not in the inbox.
    */
   pruneSyncedEvents: (options?: PruneOptions) => Promise<PruneResult>;
+  /**
+   * Empties this device's copy so the next sync rebuilds it from the server.
+   * Rows are removed through the replay path, so no delete events are pushed.
+   * Clears outbox, inbox, dead-letter and row versions, rewinds the pull cursor
+   * to zero and assigns a new `clientId` so this device's own history replays.
+   * `localOnly` collections are kept. Throws {@link UnsyncedChangesError} while
+   * the outbox has unpushed changes unless `discardPending` is set. Call
+   * `sync()` afterwards to pull everything back.
+   */
+  resetLocalReplica: (options?: ResetLocalReplicaOptions) => Promise<ResetLocalReplicaResult>;
   /** Current push limits after preset, overrides and clamping. */
   getPushLimits: () => SyncPushLimits;
   /**
