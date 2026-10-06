@@ -6,7 +6,6 @@ import {
   DEFAULT_EVENT_SCHEMA_VERSION,
   DEFAULT_MAX_ATTEMPTS,
   DEFAULT_MAX_DELAY_MS,
-  DEFAULT_PUSH_BATCH_SIZE,
   INBOX_ID,
   OUTBOX_ID,
   RESERVED_IDS,
@@ -18,6 +17,7 @@ import { createHookEmitter } from "../internal/hooks";
 import type { EmitHook } from "../internal/hooks";
 import { pullInbox } from "../internal/pull";
 import { pushOutbox, toOutboundEvent } from "../internal/push";
+import { resolvePushLimits } from "./sync-presets";
 import { readRowVersion, recordRowVersion, replayInbox } from "../internal/replay";
 import { createSerialQueue } from "../internal/serial-queue";
 import {
@@ -161,7 +161,7 @@ export async function createEventSourcedDB<
   const pullOverlap = Math.max(0, config.pullOverlap ?? 0);
   const recordLocalEchoes = config.recordLocalEchoes ?? true;
   const eventSchemaVersion = config.eventSchemaVersion ?? DEFAULT_EVENT_SCHEMA_VERSION;
-  const pushBatchSize = Math.max(1, config.pushBatchSize ?? DEFAULT_PUSH_BATCH_SIZE);
+  const { pushBatchSize, maxPushBytes } = resolvePushLimits(config);
   const backendMismatch = config.backendMismatch ?? "resetCursor";
   const conflictDetection = config.conflictDetection ?? false;
   const lockName = `${SYNC_LOCK_PREFIX}:${config.lockName ?? "default"}`;
@@ -181,6 +181,7 @@ export async function createEventSourcedDB<
     pullOverlap,
     recordLocalEchoes,
     pushBatchSize,
+    maxPushBytes,
     backendMismatch,
     conflictDetection,
     eventSchemaVersion,
@@ -364,6 +365,7 @@ export async function createEventSourcedDB<
           rowversions,
           push: transport.push,
           batchSize: pushBatchSize,
+          maxBytes: maxPushBytes,
           retry,
           now: Date.now(),
           emit,

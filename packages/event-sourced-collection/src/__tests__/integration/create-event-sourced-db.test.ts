@@ -42,6 +42,7 @@ type CreateDbOptions = {
   upcastEvent?: UpcastEventFn;
   retry?: RetryConfig;
   pushBatchSize?: number;
+  recordLocalEchoes?: boolean;
   backendMismatch?: BackendMismatchPolicy;
   conflictDetection?: boolean;
   lock?: SyncLock;

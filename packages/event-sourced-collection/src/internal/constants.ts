@@ -15,7 +15,10 @@ export const RESERVED_IDS: ReadonlySet<string> = new Set([
   ROWVERSIONS_ID,
 ]);
 
-export const DEFAULT_PUSH_BATCH_SIZE = 100;
+export const DEFAULT_PUSH_BATCH_SIZE = 20;
+export const MIN_PUSH_BATCH_SIZE = 1;
+export const MAX_PUSH_BATCH_SIZE = 100;
+export const PAYLOAD_TOO_LARGE_ERROR_CODE = "PAYLOAD_TOO_LARGE";
 export const DEFAULT_MAX_ATTEMPTS = 8;
 export const DEFAULT_BASE_DELAY_MS = 1_000;
 export const DEFAULT_MAX_DELAY_MS = 5 * 60 * 1_000;

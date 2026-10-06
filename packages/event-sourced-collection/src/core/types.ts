@@ -514,6 +514,13 @@ export type SyncLock = {
   ) => Promise<{ acquired: true; result: T } | { acquired: false }>;
 };
 
+export type SyncPushPreset = "default" | "serverless" | "vercel";
+
+export type SyncPushLimits = {
+  pushBatchSize: number;
+  maxPushBytes: number | null;
+};
+
 export type RetryConfig = {
   /**
    * Attempts before an event is moved to `deadletter`. Defaults to 8.
@@ -723,11 +730,25 @@ export interface EventSourcedSharedOptions {
    */
   retry?: RetryConfig;
   /**
-   * Maximum events per push request. Defaults to 100. Events that share a
-   * `txId` stay in the same batch even if that exceeds the limit, so a single
-   * transaction is never split across requests.
+   * Starting point for `pushBatchSize` / `maxPushBytes`, tuned for a hosting
+   * platform's request body limit. Explicit values override the preset.
+   * See {@link SYNC_PUSH_PRESETS}.
+   */
+  syncPreset?: SyncPushPreset;
+  /**
+   * Maximum events per push request, clamped to 1–100. Defaults to 20. Events
+   * that share a `txId` stay in the same batch even if that exceeds the limit,
+   * so a single transaction is never split across requests.
    */
   pushBatchSize?: number;
+  /**
+   * Maximum JSON body size of one push request, in bytes. Batches close before
+   * this would be exceeded. A single event larger than this is dead-lettered
+   * with code `PAYLOAD_TOO_LARGE` instead of being sent. When the server still
+   * answers HTTP 413, the batch is halved and retried down to single events.
+   * Unset means no byte limit.
+   */
+  maxPushBytes?: number;
   /**
    * What to do when the server reports a different `backendId` than last sync
    * (wiped or swapped database). Defaults to `"resetCursor"`: clear the inbox,
