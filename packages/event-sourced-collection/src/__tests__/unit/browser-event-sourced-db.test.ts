@@ -11,8 +11,25 @@ import { makeTodo, openTempSqlite, type TodoDefs } from "../helpers/node-db";
 
 const collections: TodoDefs = { todos: { getKey: (todo) => todo.id } };
 
+function createMemoryStorage(): Storage {
+  const items = new Map<string, string>();
+  return {
+    get length() {
+      return items.size;
+    },
+    clear: () => items.clear(),
+    getItem: (key) => items.get(key) ?? null,
+    key: (index) => [...items.keys()][index] ?? null,
+    removeItem: (key) => void items.delete(key),
+    setItem: (key, value) => void items.set(key, String(value)),
+  };
+}
+
 async function withWindow<T>(run: () => T | Promise<T>): Promise<T> {
   vi.stubGlobal("window", {});
+  // TanStack DB reads localStorage once `window` exists. Node 25 ships a global
+  // localStorage without getItem unless --localstorage-file is set.
+  vi.stubGlobal("localStorage", createMemoryStorage());
   try {
     return await run();
   } finally {
