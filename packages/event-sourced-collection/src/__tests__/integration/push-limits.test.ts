@@ -59,6 +59,32 @@ describe("push limits", () => {
     expect(db.getSyncStatus().pendingCount).toBe(0);
   });
 
+  it("applies setPushLimits to the next sync", async () => {
+    const batches: number[] = [];
+    const db = await openTodoDb({
+      pushBatchSize: 50,
+      sync: {
+        push: async (events) => {
+          batches.push(events.length);
+          return confirmAll(events);
+        },
+        pull: noPull,
+      },
+    });
+
+    expect(db.setPushLimits({ pushBatchSize: 2 })).toEqual({
+      pushBatchSize: 2,
+      maxPushBytes: null,
+    });
+    for (let i = 0; i < 5; i++) {
+      await db.collections.todos.insert(makeTodo(`t${i}`)).isPersisted.promise;
+    }
+    await db.sync();
+
+    expect(batches).toEqual([2, 2, 1]);
+    expect(db.setPushLimits({ pushBatchSize: 0 }).pushBatchSize).toBe(1);
+  });
+
   it("keeps every request body under maxPushBytes", async () => {
     const maxPushBytes = 2_000;
     const sizes: number[] = [];

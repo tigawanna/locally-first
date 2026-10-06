@@ -50,6 +50,7 @@ import type {
   PruneResult,
   RowVersionEntry,
   SyncMetaEntry,
+  SyncPushLimits,
   SyncResult,
   SyncStatus,
   SyncTrigger,
@@ -161,7 +162,8 @@ export async function createEventSourcedDB<
   const pullOverlap = Math.max(0, config.pullOverlap ?? 0);
   const recordLocalEchoes = config.recordLocalEchoes ?? true;
   const eventSchemaVersion = config.eventSchemaVersion ?? DEFAULT_EVENT_SCHEMA_VERSION;
-  const { pushBatchSize, maxPushBytes } = resolvePushLimits(config);
+  let pushLimits: SyncPushLimits = resolvePushLimits(config);
+  const { pushBatchSize, maxPushBytes } = pushLimits;
   const backendMismatch = config.backendMismatch ?? "resetCursor";
   const conflictDetection = config.conflictDetection ?? false;
   const lockName = `${SYNC_LOCK_PREFIX}:${config.lockName ?? "default"}`;
@@ -364,8 +366,8 @@ export async function createEventSourcedDB<
           deadletter,
           rowversions,
           push: transport.push,
-          batchSize: pushBatchSize,
-          maxBytes: maxPushBytes,
+          batchSize: pushLimits.pushBatchSize,
+          maxBytes: pushLimits.maxPushBytes,
           retry,
           now: Date.now(),
           emit,
@@ -770,6 +772,17 @@ export async function createEventSourcedDB<
     subscribeSyncStatus,
     retryDeadLetter,
     discardDeadLetter,
+    getPushLimits: () => pushLimits,
+    setPushLimits(next: Partial<SyncPushLimits>) {
+      pushLimits = resolvePushLimits({
+        pushBatchSize: next.pushBatchSize ?? pushLimits.pushBatchSize,
+        maxPushBytes:
+          (next.maxPushBytes === undefined ? pushLimits.maxPushBytes : next.maxPushBytes) ??
+          undefined,
+      });
+      log.info("push limits updated", pushLimits);
+      return pushLimits;
+    },
     pruneSyncedEvents,
     dispose,
   };

@@ -858,6 +858,13 @@ export type EventSourcedDB<TDefs extends Record<string, CollectionDefConstraint>
    * rows. Safe because the pull cursor lives in `syncmeta`, not in the inbox.
    */
   pruneSyncedEvents: (options?: PruneOptions) => Promise<PruneResult>;
+  /** Current push limits after preset, overrides and clamping. */
+  getPushLimits: () => SyncPushLimits;
+  /**
+   * Changes push limits for future batches (the batch in flight is unaffected).
+   * `pushBatchSize` is clamped to 1–100; `maxPushBytes: null` removes the cap.
+   */
+  setPushLimits: (limits: Partial<SyncPushLimits>) => SyncPushLimits;
   dispose: () => void;
 };
 
