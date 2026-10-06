@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { SyncPushError } from "../../core/sync";
 import { SYNC_PUSH_PRESETS, resolvePushLimits } from "../../core/sync-presets";
 import type { OutboundEvent, PullResponse, PushResponse } from "../../core/types";
-import { makeTodo, openTodoDb } from "../helpers/node-db";
+import { makeTodo, openEventSourcedDb, openTodoDb } from "../helpers/node-db";
 
 const noPull = async (): Promise<PullResponse> => ({ events: [], cursor: "0", hasMore: false });
 
@@ -31,6 +31,56 @@ describe("resolvePushLimits", () => {
       pushBatchSize: 4,
       maxPushBytes: SYNC_PUSH_PRESETS.vercel.maxPushBytes,
     });
+  });
+});
+
+describe("localOnly collections", () => {
+  it("persists rows without outbox events and ignores pulled events", async () => {
+    const pushed: string[] = [];
+    let pulled = false;
+    const db = await openEventSourcedDb({
+      collections: {
+        todos: { getKey: (todo: { id: string }) => todo.id },
+        drafts: { getKey: (draft: { id: string; body: string }) => draft.id, localOnly: true },
+      },
+      sync: {
+        push: async (events) => {
+          pushed.push(...events.map((event) => event.collectionId));
+          return confirmAll(events);
+        },
+        pull: async () => {
+          if (pulled) return { events: [], cursor: "1", hasMore: false };
+          pulled = true;
+          return {
+            events: [
+              {
+                globalSeq: 1,
+                eventId: "remote-draft",
+                collectionId: "drafts",
+                type: "insert",
+                key: "d1",
+                payload: { id: "d1", body: "from server" },
+                timestamp: 0,
+                cursor: "1",
+              },
+            ],
+            cursor: "1",
+            hasMore: false,
+          };
+        },
+      },
+    });
+
+    await db.collections.drafts.insert({ id: "d1", body: "local" }).isPersisted.promise;
+    await db.collections.todos.insert({ id: "t1" }).isPersisted.promise;
+    expect([...db.collections.outbox.state.values()].map((row) => row.collectionId)).toEqual([
+      "todos",
+    ]);
+
+    await db.sync();
+
+    expect(pushed).toEqual(["todos"]);
+    expect(db.collections.drafts.get("d1")).toMatchObject({ body: "local" });
   });
 });
 

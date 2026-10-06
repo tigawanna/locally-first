@@ -59,6 +59,8 @@ export type ReplayOutcome =
 
 export type ReplayContext = {
   targets: Record<string, AcceptMutationsCollection>;
+  /** Collections whose inbound events are skipped (see `CollectionDef.localOnly`). */
+  localOnlyIds: ReadonlySet<string>;
   rowversions: Collection<RowVersionEntry, string>;
   deadletter: Collection<DeadLetterEntry, string>;
   unknownEventHandling: UnknownEventHandling;

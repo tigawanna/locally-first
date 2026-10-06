@@ -62,6 +62,7 @@ import { generateEventId } from "../utils/uuid";
 type CollectionDefConstraint = {
   getKey: (state: never) => string | number;
   schemaVersion?: number;
+  localOnly?: boolean;
   indexes?: ReadonlyArray<{
     select: (row: never) => unknown;
     name?: string;
@@ -227,10 +228,15 @@ export async function createEventSourcedDB<
 
   const { outbox, inbox, deadletter, syncmeta, rowversions } = meta;
   const userCollections = {} as CollectionMap<TDefs>;
+  const localOnlyIds = new Set(
+    Object.keys(config.collections).filter((id) => config.collections[id]!.localOnly === true),
+  );
 
   for (const collectionId of Object.keys(config.collections)) {
     const def = config.collections[collectionId]!;
     const getKey = def.getKey as (item: Record<string, unknown>) => string | number;
+    const hook = (type: MutationType) =>
+      def.localOnly ? noOutboxHook : createMutationHook({ ...mutationContext, type });
 
     const mutationContext = {
       outbox,
@@ -250,9 +256,9 @@ export async function createEventSourcedDB<
       persistence: config.persistence,
       schemaVersion: def.schemaVersion ?? defaultSchemaVersion,
       gcTime: Number.POSITIVE_INFINITY,
-      onInsert: createMutationHook({ ...mutationContext, type: "insert" }),
-      onUpdate: createMutationHook({ ...mutationContext, type: "update" }),
-      onDelete: createMutationHook({ ...mutationContext, type: "delete" }),
+      onInsert: hook("insert"),
+      onUpdate: hook("update"),
+      onDelete: hook("delete"),
     });
 
     const collection = config.createCollection(options);
@@ -316,8 +322,17 @@ export async function createEventSourcedDB<
     pullCursor: readPullCursor(syncmeta, inbox),
   });
 
+  // Outbox entries authored before a collection became local-only would
+  // otherwise still be pushed.
+  for (const entry of [...outbox.state.values()]) {
+    if (!entry.sync && localOnlyIds.has(entry.collectionId)) {
+      await outbox.delete(entry.eventId).isPersisted.promise;
+    }
+  }
+
   const replayContext: ReplayContext = {
     targets: replayTargets,
+    localOnlyIds,
     rowversions,
     deadletter,
     unknownEventHandling,
@@ -897,6 +912,11 @@ function applyCollectionIndexes(
   register();
 
   indexable.on?.("status:ready", register);
+}
+
+/** Handler for `localOnly` collections: persist locally, author no event. */
+async function noOutboxHook(): Promise<Record<string, unknown>> {
+  return {};
 }
 
 function createMutationHook(context: MutationContext) {

@@ -87,6 +87,13 @@ export async function replayEvent(
     return { status: "skipped", reason };
   }
 
+  if (context.localOnlyIds.has(collectionId)) {
+    const reason = `local-only collection "${collectionId}"`;
+    log.debug("replay skipped: local-only collection", { eventId, collectionId });
+    context.emit("onEventSkipped", { eventId, collectionId, reason });
+    return { status: "skipped", reason };
+  }
+
   const migrated = upcast(context, event);
   if (migrated.status !== "ok") return migrated.outcome;
 

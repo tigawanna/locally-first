@@ -459,6 +459,12 @@ export type CollectionDef<TState = object, TKey extends string | number = string
   schemaVersion?: number;
   /** Secondary indexes created when the collection is opened. */
   indexes?: ReadonlyArray<CollectionIndexDef<TState, TKey>>;
+  /**
+   * Persist locally but never sync: mutations author no outbox events, and
+   * pulled events for this collection are skipped so server history cannot
+   * overwrite local rows. Outbox entries queued before the switch are dropped.
+   */
+  localOnly?: boolean;
 };
 
 export type InferState<T> = T extends { getKey: (state: infer S) => string | number }
@@ -478,6 +484,7 @@ export type InferKey<T> = T extends { getKey: (state: never) => infer K }
 type CollectionDefConstraint = {
   getKey: (state: never) => string | number;
   schemaVersion?: number;
+  localOnly?: boolean;
   indexes?: ReadonlyArray<{
     select: (row: never) => unknown;
     name?: string;
