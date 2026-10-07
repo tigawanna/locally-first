@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { UnsyncedChangesError } from "../../core/create-event-sourced-db";
+import { BackendMismatchError } from "../../internal/pull";
 import { createMockSyncBackend } from "../../testing/mock-sync-backend";
 import {
   makeTodo,
@@ -72,6 +73,24 @@ describe("resetLocalReplica", () => {
 
     await db.sync();
     expect(backend.events).toEqual([]);
+  });
+
+  it("forgets the backend id so a 'fail' client can adopt a rebuilt backend", async () => {
+    const backend = createMockSyncBackend({ backendId: "before" });
+    const db = await openTodoDb({ sync: backend, backendMismatch: "fail" });
+    backend.seed({ collectionId: "todos", key: "t1", payload: makeTodo("t1") });
+    await db.sync();
+
+    backend.setBackendId("after");
+    const mismatched = await db.sync();
+    expect(mismatched.errors.some((err) => err instanceof BackendMismatchError)).toBe(true);
+
+    await db.resetLocalReplica();
+    const resynced = await db.sync();
+
+    expect(resynced.errors).toEqual([]);
+    expect(db.collections.syncmeta.toArray[0]?.backendId).toBe("after");
+    expect(todoRows(db.collections.todos).map((row) => row.id)).toEqual(["t1"]);
   });
 
   it("keeps local-only collections", async () => {

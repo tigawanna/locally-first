@@ -835,6 +835,9 @@ export async function createEventSourcedDB<
           draft.clientId = clientId.value;
           draft.pullCursor = 0;
           draft.lastError = null;
+          // Re-recorded on the next pull, so a reset is how a "fail" client
+          // accepts a rebuilt backend.
+          draft.backendId = null;
         }).isPersisted.promise;
 
         log.warn("local replica reset", {
