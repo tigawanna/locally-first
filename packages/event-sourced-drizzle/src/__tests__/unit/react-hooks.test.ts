@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { useManualSync } from "../../react/use-manual-sync";
 import { useSyncEnabled } from "../../react/use-sync-enabled";

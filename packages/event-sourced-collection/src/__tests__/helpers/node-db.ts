@@ -7,7 +7,7 @@ import Database from "better-sqlite3";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach } from "vitest";
+import { afterEach } from "vite-plus/test";
 
 import { createEventSourcedDB } from "../../core/create-event-sourced-db";
 import { createNodeEventSourcedDB } from "../../node";

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { UnsyncedChangesError } from "../../core/create-event-sourced-db";
 import { BackendMismatchError } from "../../internal/pull";

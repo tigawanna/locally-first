@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { createSqliteTestContext, createPgliteTestContext, type TestContext } from "../helpers/db";
 
 type CreateCtx = (options?: any) => Promise<TestContext>;

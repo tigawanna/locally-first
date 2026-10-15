@@ -5,9 +5,9 @@ packages:
 catalog:
   "@typescript/native-preview": 7.0.0-dev.20260519.1
   typescript: 6.0.3
-  vite: npm:@voidzero-dev/vite-plus-core@latest
-  vite-plus: latest
-  vitest: ^4.1.10
+  vite: npm:@voidzero-dev/vite-plus-core@0.2.9
+  vite-plus: 0.2.9
+  vitest: 4.1.10
 
 onlyBuiltDependencies:
   - core-js
@@ -21,6 +21,13 @@ onlyBuiltDependencies:
 overrides:
   vite: "catalog:"
   vitest: "catalog:"
+  "@tanstack/react-router": 1.169.2
+  "@tanstack/react-start": 1.167.65
+  "@tanstack/router-core": 1.169.2
+  "@types/react": ^19.2.14
+  "@types/react-dom": ^19.2.3
+  esbuild: ^0.27.7
+  postcss: ^8.5.10
 
 peerDependencyRules:
   allowAny:

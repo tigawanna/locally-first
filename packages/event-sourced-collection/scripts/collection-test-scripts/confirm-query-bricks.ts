@@ -1,3 +1,15 @@
+/**
+ * Checks that the outbox and inbox query helpers return the same event ids
+ * as filtering the in-memory collection.
+ *
+ * Re-run with: pnpm exec tsx scripts/confirm-query-bricks.ts
+ *
+ * Seeds a temp SQLite database with due, future, failed, synced, and
+ * local-only outbox rows plus pending and applied inbox rows. Compares
+ * dueOutboxEntries, synced and unsynced outbox reads, syncedOutboxBefore
+ * (keeping the last row), pendingLocalOnlyOutbox, pendingInboxEntries, and
+ * syncedInboxBefore. Throws if any pair diverges.
+ */
 import { createCollection } from "@tanstack/db";
 import {
   createNodeSQLitePersistence,
@@ -8,7 +20,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { InboxEntry, OutboxEntry } from "../src/core/types";
+import { trimKeepLast } from "../../src/core/event-sourced-db/trim";
+import type { InboxEntry, OutboxEntry } from "../../src/core/types";
 import {
   dueOutboxEntries,
   pendingInboxEntries,
@@ -17,9 +30,8 @@ import {
   syncedOutboxBefore,
   syncedOutboxEntries,
   unsyncedOutboxEntries,
-} from "../src/internal/collection-queries";
-import { trimKeepLast } from "../src/core/event-sourced-db/trim";
-import { createNodeEventSourcedDB } from "../src/node";
+} from "../../src/internal/collection-queries";
+import { createNodeEventSourcedDB } from "../../src/node";
 
 const NOW = 1_000;
 

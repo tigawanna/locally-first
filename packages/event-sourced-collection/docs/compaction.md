@@ -13,9 +13,16 @@ An `update` looks at unsynced outbox events for the same collection and key, old
 
 The replacement has `compaction: true` and `compactedAt` set to when the chain was folded. Already-synced events stay in the outbox; they are the server's problem to merge.
 
-Set `compactOnWrite: false` to keep every edit as its own event. Call `db.compact()` to fold them later. `compact()` walks each synced collection, and for each current row id loads only that row's outbox events. Events older than the latest `compactedAt` stay as they are. That compaction and anything newer become one event, including events that have already synced. The replacement is unpushed, so the next `sync()` sends it.
+A delete ends one span of that row's outbox history: the events from its insert through that delete. The code calls one span a life. The next insert of the same key starts another. `compactOnWrite` only folds the unsynced insert and updates that come after the latest delete. The delete, and every event before it, stays until `compact()`.
 
-`pruneSyncedEvents` is a different operation. It deletes events the server has already confirmed. `compact` rewrites events that have not been pushed.
+Set `compactOnWrite: false` to keep every edit as its own event. Call `db.compact()` to fold them later. `compact()` visits each live row id and each outbox key. For a row that still exists, events older than the latest `compactedAt` stay. That compaction and anything newer become one event, including events that have already synced. The replacement is unpushed, so the next `sync()` sends it.
+
+For a span that ends in a delete, `compact()` does not fold it into the next insert:
+
+- The server never saw that span: the insert, the updates, and the delete are dropped.
+- The server did see it: synced events stay, and the unsynced tail becomes one delete of the last synced row.
+
+`pruneSyncedEvents` is a different operation. It deletes events the server has already confirmed. `compact` rewrites a chain into one event the next sync will push, and that chain can include events that were already synced.
 
 ## On the server
 

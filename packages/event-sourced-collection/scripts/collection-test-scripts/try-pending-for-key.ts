@@ -1,3 +1,13 @@
+/**
+ * Prints unpushedOutboxEventsForKey next to the same filter over the in-memory outbox.
+ *
+ * Re-run with: pnpm exec tsx scripts/try-pending-for-key.ts
+ *
+ * Seeds a temp SQLite database with inserts, single and double edits, a
+ * delete, an edit then a delete, and edits that follow a synced insert.
+ * For each key (plus a missing one) it logs both result sets and whether
+ * their event ids match.
+ */
 import { createCollection } from "@tanstack/db";
 import {
   createNodeSQLitePersistence,
@@ -8,8 +18,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { pendingForKey } from "../src/internal/compact-outbox";
-import { createNodeEventSourcedDB } from "../src/node";
+import { unpushedOutboxEventsForKey } from "../../src/internal/compact-outbox";
+import { createNodeEventSourcedDB } from "../../src/node";
 
 const dir = mkdtempSync(join(tmpdir(), "esc-pending-"));
 const sqlite = new Database(join(dir, "app.sqlite"));
@@ -83,7 +93,7 @@ try {
   );
 
   for (const key of ["keep", "edit", "edit-twice", "drop", "edit-then-drop", "synced", "missing"]) {
-    const pending = await pendingForKey(db.collections.outbox, "todos", key);
+    const pending = await unpushedOutboxEventsForKey(db.collections.outbox, "todos", key);
     const inMemory = [...db.collections.outbox.state.values()]
       .filter((row) => !row.sync && row.collectionId === "todos" && row.key === key)
       .sort((a, b) => a.localSeq - b.localSeq);

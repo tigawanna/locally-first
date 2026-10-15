@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { createMockSyncBackend } from "../../testing/mock-sync-backend";
 import { createNodeTodoHandle, makeTodo, openTempSqlite, todoRows } from "../helpers/node-db";

@@ -1,4 +1,4 @@
-import { defineConfig } from "tsdown";
+import { defineConfig } from "vite-plus/pack";
 
 export default defineConfig({
   entry: ["src/index.ts", "src/browser.ts", "src/node.ts", "src/react.ts", "src/react-native.ts"],

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { makeTodo, openTodoDb } from "../helpers/node-db";
 
@@ -89,6 +89,25 @@ describe("compact", () => {
     expect(events[0]?.compactedAt).toEqual(expect.any(Number));
   });
 
+  it("folds a recreated row without swallowing the earlier delete", async () => {
+    const db = await openTodoDb();
+    await db.collections.todos.insert(makeTodo("t1", "Task")).isPersisted.promise;
+    await db.collections.todos.delete("t1").isPersisted.promise;
+    await db.collections.todos.insert(makeTodo("t1", "Reborn")).isPersisted.promise;
+    await db.collections.todos.update("t1", (draft) => {
+      draft.title = "Reborn 2";
+    }).isPersisted.promise;
+
+    const events = [...db.collections.outbox.state.values()].sort(
+      (a, b) => a.localSeq - b.localSeq,
+    );
+    expect(events.map((event) => event.type)).toEqual(["insert", "delete", "insert"]);
+    expect(events[2]).toMatchObject({
+      compaction: true,
+      payload: { title: "Reborn 2" },
+    });
+  });
+
   it("folds events that have already synced", async () => {
     const db = await openTodoDb({ compactOnWrite: false });
     await db.collections.todos.insert(makeTodo("t1", "Task")).isPersisted.promise;
@@ -110,6 +129,46 @@ describe("compact", () => {
       sync: false,
       compaction: true,
       payload: { title: "Edited" },
+    });
+  });
+
+  it("drops a life the server never saw", async () => {
+    const db = await openTodoDb({ compactOnWrite: false });
+    await db.collections.todos.insert(makeTodo("t1", "Task")).isPersisted.promise;
+    await db.collections.todos.update("t1", (draft) => {
+      draft.title = "Edited";
+    }).isPersisted.promise;
+    await db.collections.todos.delete("t1").isPersisted.promise;
+
+    const result = await db.compact();
+    expect(result).toEqual({ compacted: 0, removed: 3 });
+    expect(db.collections.outbox.state.size).toBe(0);
+  });
+
+  it("keeps the synced insert and one delete after later edits", async () => {
+    const db = await openTodoDb({ compactOnWrite: false });
+    await db.collections.todos.insert(makeTodo("t1", "Task")).isPersisted.promise;
+    const created = [...db.collections.outbox.state.values()][0]!;
+    await db.collections.outbox.update(created.eventId, (draft) => {
+      draft.sync = true;
+    }).isPersisted.promise;
+    await db.collections.todos.update("t1", (draft) => {
+      draft.title = "Edited";
+    }).isPersisted.promise;
+    await db.collections.todos.delete("t1").isPersisted.promise;
+
+    const result = await db.compact();
+    expect(result).toEqual({ compacted: 1, removed: 1 });
+    const events = [...db.collections.outbox.state.values()].sort(
+      (a, b) => a.localSeq - b.localSeq,
+    );
+    expect(events.map((event) => ({ type: event.type, sync: event.sync }))).toEqual([
+      { type: "insert", sync: true },
+      { type: "delete", sync: false },
+    ]);
+    expect(events[1]).toMatchObject({
+      payload: { title: "Task" },
+      previous: { title: "Task" },
     });
   });
 });

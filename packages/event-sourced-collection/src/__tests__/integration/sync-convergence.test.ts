@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import Database from "better-sqlite3";
 
 import { createMockSyncBackend } from "../../testing/mock-sync-backend";

@@ -402,6 +402,23 @@ Update and delete events additionally carry `previous`, the row state before the
 mutation. That makes every event invertible, which is the prerequisite for
 rollback, undo, and any future rebase support. Inserts have `previous: null`.
 
+An update's `payload` is the whole row after the change, not the keys that
+changed. `createMutationHook` stores TanStack's `modified` draft. A draft edit
+that touches only `title` still records `color` and every other field, and
+`Object.assign` of a partial onto the draft does the same. Returning a new
+partial object from the callback, or `delete`ing a key on the draft, writes no
+update at all. Confirmed 15 Oct 2026 with
+`pnpm exec tsx scripts/collection-test-scripts/probe-update-payloads.ts`.
+
+The one way to store a partial is to insert an outbox row by hand. Compaction
+then treats that payload as the whole latest row and drops every field it does
+not contain. The live collection is not updated by that insert, so the row and
+its outbox disagree.
+
+`replaceUnpushedOutboxEvents` deletes the events the folded row already
+accounts for: every unpushed insert and update for that row between the oldest
+event in the chain and the latest, then inserts the single replacement.
+
 ---
 
 ### 11. Unknown Events Are Recorded, Not Retried Forever
@@ -683,15 +700,27 @@ so pruning cannot rewind pull position. It does **not** prune `rowversions` or
 
 - Requires a server (not P2P)
 - No real-time push (polling or explicit sync)
+
+<!-- TODO: resolve the rebase stuff -->
+
 - No rollback or rebase — conflicts are detected and parked, never merged (decision #12)
 - Conflict detection is opt-in and costs an index write per mutation and per replay
 - Dead-lettered events are lost unless your UI surfaces them, in both directions (decisions #13, #13b)
 - Two devices editing the same row between syncs do not converge (see Open issues)
 - Leader election is per sync call, not a long-lived leader owning all writes (decision #17)
 - Log pruning is manual — call `pruneSyncedEvents()` yourself on a schedule
+
+<!-- TODO: resolve this -->
+
 - Offline transport failures still consume retry budget (see Open issues)
+
+<!-- TODO: resolve this whe should be able to replay from 0 -->
+
 - Cannot replay from event 0 to rebuild state (state is materialized separately)
 - Update events store full modified object (not a minimal diff)
+
+<!-- TODO: resolve this and implment the custom functionality -->
+
 - Materialization is a plain upsert, so there are no custom materializers or derived read models
 
 ---
@@ -857,6 +886,18 @@ const pending = await queryOnce((q) =>
     .orderBy(({ e }) => e.localSeq, "asc"),
 );
 ```
+
+**When the in-memory loop stays.** A `queryOnce` call builds a result set. That is the right read when a predicate drops most rows (due outbox, pending inbox, one row's unsynced chain). It is the wrong read when the code already walks every row for a max, a count, or a list of keys. Those loops do not allocate a filtered array. Replacing them was measured on 15 Oct 2026 with `pnpm exec tsx scripts/probe-remaining-scans.ts` (5,500 outbox rows, 2,000 inbox rows, 1,500 todos, `localSeq` and `globalSeq` indexed):
+
+| Function                          | Loop                      | `queryOnce`                                                                                                                      |
+| --------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `nextLocalSeq`                    | 4.1 ms                    | 22.6 ms. `orderBy` + `limit(1)` still returns one full outbox row. Without the index, TanStack loads the whole collection first. |
+| `getSyncStatus`                   | 5.0 ms for both counts    | 86 ms + 13 ms for two `count()` queries. Counts matched.                                                                         |
+| `readPullCursor`                  | 1.5 ms                    | 19.9 ms. The max matched. The persisted cursor is still the floor; inbox rows only raise it.                                     |
+| Delete-all in `resetLocalReplica` | key iterator, no row copy | 5,500 full rows, about 2.8 MB                                                                                                    |
+| `compact()` walking live row ids  | key iterator              | 1,500 full todo rows, about 171 KB. The per-key outbox load is already `queryOnce`.                                              |
+
+Do not convert these five because a caller can `await`. The query is the extra copy.
 
 ---
 

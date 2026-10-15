@@ -1,6 +1,6 @@
 import { getTableColumns, getTableName } from "drizzle-orm";
 import { integer, text } from "drizzle-orm/sqlite-core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   defineDeadLetterTable as definePgDeadLetterTable,

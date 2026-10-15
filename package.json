@@ -23,27 +23,11 @@
     "@typescript/native-preview": "catalog:",
     "turbo": "^2.9.6",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vite-plus": "catalog:"
   },
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "pnpm@10.27.0",
-  "pnpm": {
-    "overrides": {
-      "@tanstack/react-router": "1.169.2",
-      "@tanstack/react-start": "1.167.65",
-      "@tanstack/router-core": "1.169.2",
-      "@types/react": "^19.2.14",
-      "@types/react-dom": "^19.2.3",
-      "esbuild": "^0.27.7",
-      "postcss": "^8.5.10"
-    },
-    "onlyBuiltDependencies": [
-      "core-js",
-      "esbuild",
-      "sharp",
-      "workerd"
-    ]
-  }
+  "packageManager": "pnpm@10.27.0"
 }

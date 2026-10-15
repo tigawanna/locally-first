@@ -42,11 +42,11 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "tsdown",
-    "dev": "tsdown --watch",
-    "test": "vitest run",
-    "test:unit": "vitest run src/__tests__/unit",
-    "test:integration": "vitest run src/__tests__/integration",
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "test": "vp test run",
+    "test:unit": "vp test run src/__tests__/unit",
+    "test:integration": "vp test run src/__tests__/integration",
     "example:sqlite": "tsx examples/sqlite.ts",
     "example:pglite": "tsx examples/pglite.ts",
     "example:generate:sqlite": "drizzle-kit generate --config examples/drizzle.sqlite.config.ts",
@@ -73,9 +73,7 @@
     "jsdom": "^26.1.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "tsdown": "^0.22.3",
-    "typescript": "catalog:",
-    "vitest": "4.1.9"
+    "typescript": "catalog:"
   },
   "peerDependencies": {
     "drizzle-orm": ">=0.45.0",

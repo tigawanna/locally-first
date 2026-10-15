@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { createOptimisticStateTracker } from "../../core/optimistic-state";
 import type { OptimisticEntry } from "../../core/optimistic-state";
 

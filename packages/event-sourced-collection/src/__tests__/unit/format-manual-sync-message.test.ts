@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { formatManualSyncMessage } from "../../react/format-manual-sync-message";
 import type { ManualSyncResult } from "../../core/types";

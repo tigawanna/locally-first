@@ -3,7 +3,7 @@ import {
   createNodeSQLitePersistence,
   persistedCollectionOptions,
 } from "@tanstack/node-db-sqlite-persistence";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { createBrowserEventSourcedDB } from "../../platforms/browser-event-sourced-db";
 import type { BrowserEventSourcedModules } from "../../platforms/browser-event-sourced-db";

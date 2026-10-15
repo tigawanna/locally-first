@@ -10,7 +10,7 @@ import Database from "better-sqlite3";
 import { eq } from "drizzle-orm";
 import { drizzle as drizzleSqlite } from "drizzle-orm/better-sqlite3";
 import { drizzle as drizzlePg } from "drizzle-orm/pglite";
-import { afterEach } from "vitest";
+import { afterEach } from "vite-plus/test";
 
 import { createSQLiteAdapter } from "../../adapters/sqlite";
 import { createEventSourcedDrizzle } from "../../core/create-event-sourced-drizzle";
@@ -474,7 +474,7 @@ export function describeDualDb(
   fn: (createCtx: DbFactory, dbType: "sqlite" | "pglite") => void,
 ): void {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { describe } = require("vitest");
+  const { describe } = require("vite-plus/test");
 
   describe(`${name} [sqlite]`, () => {
     fn(createSqliteTestContext, "sqlite");

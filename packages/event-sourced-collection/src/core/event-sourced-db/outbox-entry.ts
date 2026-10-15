@@ -5,19 +5,27 @@ import type { OutboxEntry } from "../types";
 
 type SeqCounter = { value: number };
 
-/** Fills a pending outbox row from identity, body, and freshly allocated ids. */
-export function outboxEntry(
-  identity: Pick<OutboxEntry, "collectionId" | "key" | "clientId" | "schemaVersion">,
-  body: Pick<OutboxEntry, "type" | "payload" | "previous" | "baseVersion"> &
-    Partial<Pick<OutboxEntry, "compaction" | "compactedAt">>,
+type OutboxIdentity = Pick<OutboxEntry, "collectionId" | "key" | "clientId" | "schemaVersion">;
+type OutboxBody = Pick<OutboxEntry, "type" | "payload" | "previous" | "baseVersion"> &
+  Partial<Pick<OutboxEntry, "compaction" | "compactedAt">>;
+
+/**
+ * Builds one outbox row that has not been synced yet.
+ * Copies which collection and row this is, plus the event body, then stamps
+ * a new event id, transaction id, timestamp, and the next local sequence.
+ */
+export function buildUnsyncedOutboxEntry(input: {
+  identity: OutboxIdentity;
+  body: OutboxBody;
   ids: {
     outbox: Collection<OutboxEntry, string>;
     seq: SeqCounter;
     eventId: string;
     txId: string;
     timestamp: number;
-  },
-): OutboxEntry {
+  };
+}): OutboxEntry {
+  const { identity, body, ids } = input;
   return {
     eventId: ids.eventId,
     collectionId: identity.collectionId,

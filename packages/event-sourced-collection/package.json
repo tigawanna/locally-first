@@ -45,8 +45,8 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "tsdown",
-    "dev": "tsdown --watch",
+    "build": "vp pack",
+    "dev": "vp pack --watch",
     "test": "vp test run",
     "test:unit": "vp test run src/__tests__/unit",
     "test:integration": "vp test run src/__tests__/integration",
@@ -72,11 +72,10 @@
     "@types/react": "^19.2.14",
     "better-sqlite3": "^13.0.3",
     "react": "^19.2.0",
-    "tsdown": "^0.22.3",
+    "tsx": "^4.23.15",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vite-plus": "catalog:",
-    "vitest": "catalog:"
+    "vite-plus": "catalog:"
   },
   "peerDependencies": {
     "@tanstack/browser-db-sqlite-persistence": ">=0.2.0",
