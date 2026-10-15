@@ -19,6 +19,7 @@ import {
 } from "./constants";
 import type { EmitHook } from "./hooks";
 import { restoreRowVersionAfterConflict } from "./replay";
+import { dueOutboxEntries } from "./collection-queries";
 import type { ResolvedRetryConfig } from "./types";
 
 export type PushOutcome = {
@@ -54,21 +55,6 @@ export function backoffDelay(attemptCount: number, retry: ResolvedRetryConfig): 
   const exponent = Math.max(0, attemptCount - 1);
   const raw = retry.baseDelayMs * 2 ** exponent;
   return Math.min(retry.maxDelayMs, raw);
-}
-
-function isDue(entry: OutboxEntry, now: number): boolean {
-  if (entry.sync) return false;
-  // A permanent rejection is dead-lettered rather than parked, so anything still
-  // marked failed here is retryable and just waiting for its backoff window.
-  if (entry.syncStatus === "failed" && entry.retryable !== true) return false;
-  return (entry.nextAttemptAt ?? 0) <= now;
-}
-
-function byLocalSeq(a: OutboxEntry, b: OutboxEntry): number {
-  if (a.localSeq !== b.localSeq) return a.localSeq - b.localSeq;
-  // localSeq can collide across tabs; eventId is a uuidv7 so it breaks the tie
-  // in creation order.
-  return a.eventId < b.eventId ? -1 : a.eventId > b.eventId ? 1 : 0;
 }
 
 export function toOutboundEvent(entry: OutboxEntry): OutboundEvent {
@@ -323,7 +309,7 @@ async function deadLetterTooLarge(
 export async function pushOutbox(args: PushArgs): Promise<PushOutcome> {
   const { outbox, push, batchSize, maxBytes, now, log } = args;
 
-  const due = [...outbox.state.values()].filter((entry) => isDue(entry, now)).sort(byLocalSeq);
+  const due = await dueOutboxEntries(outbox, now);
 
   log.debug("push outbox", { dueCount: due.length, batchSize, maxBytes });
 

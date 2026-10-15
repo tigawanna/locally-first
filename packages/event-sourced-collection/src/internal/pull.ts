@@ -8,6 +8,7 @@ import type {
   ServerEvent,
   SyncMetaEntry,
 } from "../core/types";
+import { syncedOutboxEntries } from "./collection-queries";
 import { DEFAULT_EVENT_SCHEMA_VERSION } from "./constants";
 import { handleReplayFailure, replayEvent, resolveInboxEntry } from "./replay";
 import { readBackendId, readPullCursor, writeBackendId, writePullCursor } from "./sync-meta";
@@ -63,8 +64,7 @@ export type PullArgs = {
 };
 
 export async function pullInbox(args: PullArgs): Promise<PullOutcome> {
-  const { outbox, inbox, syncmeta, pull, clientId, pullOverlap, recordLocalEchoes, context } =
-    args;
+  const { outbox, inbox, syncmeta, pull, clientId, pullOverlap, recordLocalEchoes, context } = args;
   const { log } = context;
 
   let pulled = 0;
@@ -278,7 +278,7 @@ async function reconcileBackendIdentity(
  * backend's history, which the new one cannot resolve.
  */
 async function requeueSyncedOutbox(outbox: Collection<OutboxEntry, string>): Promise<number> {
-  const synced = [...outbox.state.values()].filter((entry) => entry.sync);
+  const synced = await syncedOutboxEntries(outbox);
 
   for (const entry of synced) {
     await outbox.update(entry.eventId, (draft) => {

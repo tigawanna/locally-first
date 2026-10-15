@@ -1,6 +1,7 @@
 import type { Collection } from "@tanstack/db";
 
 import type { DeadLetterEntry, InboxEntry, RowVersionEntry, UpcastableEvent } from "../core/types";
+import { pendingInboxEntries } from "./collection-queries";
 import { DEFAULT_EVENT_SCHEMA_VERSION, RESERVED_IDS } from "./constants";
 import type { ReplayableEvent, ReplayContext, ReplayOutcome } from "./types";
 
@@ -361,9 +362,7 @@ export async function replayInbox(
 ): Promise<ReplaySummary> {
   const { log } = context;
 
-  const pending = [...inbox.state.values()]
-    .filter((entry) => !entry.sync)
-    .sort((a, b) => a.globalSeq - b.globalSeq);
+  const pending = await pendingInboxEntries(inbox);
 
   log.info("pending inbox replay started", { pendingCount: pending.length });
 

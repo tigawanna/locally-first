@@ -1,4 +1,4 @@
-import type { Collection } from "@tanstack/db";
+import { BasicIndex, type Collection } from "@tanstack/db";
 
 import {
   DEADLETTER_ID,
@@ -8,70 +8,48 @@ import {
   DEFAULT_MAX_DELAY_MS,
   INBOX_ID,
   OUTBOX_ID,
-  RESERVED_IDS,
   ROWVERSIONS_ID,
   SYNCMETA_ID,
-  SYNCMETA_KEY,
   SYNC_LOCK_PREFIX,
 } from "../internal/constants";
+import { pendingLocalOnlyOutbox } from "../internal/collection-queries";
+import { compactOutbox, nextLocalSeq, squashedEntry } from "../internal/compact-outbox";
 import { createHookEmitter } from "../internal/hooks";
-import type { EmitHook } from "../internal/hooks";
-import { pullInbox } from "../internal/pull";
-import { pushOutbox, toOutboundEvent } from "../internal/push";
-import { resolvePushLimits } from "./sync-presets";
-import { readRowVersion, recordRowVersion, replayInbox } from "../internal/replay";
+import { replayInbox } from "../internal/replay";
 import { createSerialQueue } from "../internal/serial-queue";
-import {
-  ensureSyncMeta,
-  readPullCursor,
-  readSyncMeta,
-  resolveClientId,
-  writePullCursor,
-  writeSyncOutcome,
-} from "../internal/sync-meta";
+import { ensureSyncMeta, readPullCursor, resolveClientId } from "../internal/sync-meta";
 import type {
   AcceptMutationsCollection,
   MetaCollections,
-  MutationHookParams,
   ReplayContext,
   ResolvedRetryConfig,
 } from "../internal/types";
-import { createSyncTransport, normalizePushResponse } from "./sync";
+import { createEventSourcedLogger } from "../utils/logger";
+import { generateEventId } from "../utils/uuid";
+import { createSyncTransport } from "./sync";
+import { resolvePushLimits } from "./sync-presets";
 import type {
   CollectionMap,
   DeadLetterEntry,
   EventSourcedDB,
   EventSourcedDBConfig,
   InboxEntry,
-  ManualSyncResult,
   MutationType,
-  OutboundEvent,
   OutboxEntry,
-  PruneOptions,
-  PruneResult,
-  ResetLocalReplicaOptions,
-  ResetLocalReplicaResult,
   RowVersionEntry,
   SyncMetaEntry,
   SyncPushLimits,
-  SyncResult,
   SyncStatus,
-  SyncTrigger,
 } from "./types";
-import type { EventSourcedLogger } from "../utils/logger";
-import { createEventSourcedLogger } from "../utils/logger";
-import { generateEventId } from "../utils/uuid";
+import { createMaintenance } from "./event-sourced-db/maintenance";
+import { applyCollectionIndexes, createMetaCollection } from "./event-sourced-db/meta-collections";
+import { createMutationHook, noOutboxHook } from "./event-sourced-db/mutation-hook";
+import { outboxEntry } from "./event-sourced-db/outbox-entry";
+import type { SyncRuntime } from "./event-sourced-db/runtime";
+import { createSyncCycle } from "./event-sourced-db/sync-cycle";
+import { assertReservedNamesAvailable } from "./event-sourced-db/errors";
 
-/**
- * Thrown by `resetLocalReplica()` while the outbox still holds changes the
- * server has not accepted. Sync first, or pass `discardPending: true`.
- */
-export class UnsyncedChangesError extends Error {
-  constructor(readonly pendingCount: number) {
-    super(`${pendingCount} local change(s) have not been pushed yet`);
-    this.name = "UnsyncedChangesError";
-  }
-}
+export { UnsyncedChangesError } from "./event-sourced-db/errors";
 
 type CollectionDefConstraint = {
   getKey: (state: never) => string | number;
@@ -85,42 +63,7 @@ type CollectionDefConstraint = {
 };
 
 type SeqCounter = { value: number };
-
-/**
- * Lets the mutation hooks, which are built before `syncmeta` has been
- * preloaded, read the persisted client id once it is known.
- */
 type ClientIdRef = { value: string };
-
-type MetaCollectionFactory = Pick<
-  EventSourcedDBConfig<Record<string, CollectionDefConstraint>>,
-  "createCollection" | "persistedCollectionOptions" | "persistence"
->;
-
-type MutationContext = {
-  outbox: Collection<OutboxEntry, string>;
-  rowversions: Collection<RowVersionEntry, string>;
-  collectionId: string;
-  type: MutationType;
-  seq: SeqCounter;
-  clientId: ClientIdRef;
-  eventSchemaVersion: number;
-  conflictDetection: boolean;
-  emit: EmitHook;
-  log: EventSourcedLogger;
-};
-
-function emptyResult(overrides: Partial<SyncResult> = {}): SyncResult {
-  return {
-    pushed: 0,
-    pulled: 0,
-    skipped: 0,
-    deadLettered: 0,
-    deferred: false,
-    errors: [],
-    ...overrides,
-  };
-}
 
 /**
  * Low-level factory: wires persistence, collections, outbox/inbox, and sync.
@@ -181,6 +124,7 @@ export async function createEventSourcedDB<
   const { pushBatchSize, maxPushBytes } = pushLimits;
   const backendMismatch = config.backendMismatch ?? "resetCursor";
   const conflictDetection = config.conflictDetection ?? false;
+  const compactOnWrite = config.compactOnWrite ?? true;
   const lockName = `${SYNC_LOCK_PREFIX}:${config.lockName ?? "default"}`;
 
   const retry: ResolvedRetryConfig = {
@@ -241,6 +185,8 @@ export async function createEventSourcedDB<
   };
 
   const { outbox, inbox, deadletter, syncmeta, rowversions } = meta;
+  outbox.createIndex((row) => row.collectionId, { name: "by-collection", indexType: BasicIndex });
+  outbox.createIndex((row) => row.key, { name: "by-key", indexType: BasicIndex });
   const userCollections = {} as CollectionMap<TDefs>;
   const syncedCollections: Array<{
     collectionId: string;
@@ -264,6 +210,7 @@ export async function createEventSourcedDB<
       clientId,
       eventSchemaVersion,
       conflictDetection,
+      compactOnWrite,
       emit,
       log,
     };
@@ -300,10 +247,13 @@ export async function createEventSourcedDB<
 
   let isSyncing = false;
   const statusListeners = new Set<(status: SyncStatus) => void>();
+  let readStatus: () => SyncStatus = () => {
+    throw new Error("sync status is not ready");
+  };
 
   const notifyStatus = (): void => {
     if (statusListeners.size === 0) return;
-    const status = getSyncStatus();
+    const status = readStatus();
     for (const listener of statusListeners) listener(status);
   };
 
@@ -343,10 +293,8 @@ export async function createEventSourcedDB<
 
   // Outbox entries authored before a collection became local-only would
   // otherwise still be pushed.
-  for (const entry of [...outbox.state.values()]) {
-    if (!entry.sync && localOnlyIds.has(entry.collectionId)) {
-      await outbox.delete(entry.eventId).isPersisted.promise;
-    }
+  for (const entry of await pendingLocalOnlyOutbox(outbox, [...localOnlyIds])) {
+    await outbox.delete(entry.eventId).isPersisted.promise;
   }
 
   const replayContext: ReplayContext = {
@@ -371,491 +319,40 @@ export async function createEventSourcedDB<
   // across tabs so only one of them syncs at a time.
   const runExclusive = createSerialQueue();
 
-  function recordError(phase: "push" | "pull" | "replay", label: string, err: unknown): Error {
-    const error = toError(err);
-    log.error(`${label} ${phase} failed`, { message: error.message });
-    emit("onSyncError", { phase, error });
-    return error;
-  }
-
-  async function pushPull(label: string): Promise<SyncResult> {
-    await outbox.preload();
-    await inbox.preload();
-
-    const errors: Error[] = [];
-    let pushed = 0;
-    let pulled = 0;
-    let skipped = 0;
-    let deadLettered = 0;
-
-    async function runPush(): Promise<void> {
-      if (!transport?.push) {
-        log.debug(`${label} push skipped: no push transport configured`);
-        return;
-      }
-
-      try {
-        const outcome = await pushOutbox({
-          outbox,
-          deadletter,
-          rowversions,
-          push: transport.push,
-          batchSize: pushLimits.pushBatchSize,
-          maxBytes: pushLimits.maxPushBytes,
-          retry,
-          now: Date.now(),
-          emit,
-          log,
-        });
-        pushed += outcome.pushed;
-        deadLettered += outcome.deadLettered;
-        if (outcome.error) {
-          errors.push(recordError("push", label, outcome.error));
-        }
-      } catch (err) {
-        errors.push(recordError("push", label, err));
-      }
-    }
-
-    await runPush();
-
-    let requeued = 0;
-
-    try {
-      if (transport?.pull) {
-        const outcome = await pullInbox({
-          outbox,
-          inbox,
-          syncmeta,
-          pull: transport.pull,
-          clientId: clientId.value,
-          pullOverlap,
-          recordLocalEchoes,
-          backendMismatch,
-          context: replayContext,
-        });
-        pulled = outcome.pulled;
-        skipped = outcome.skipped;
-        deadLettered += outcome.deadLettered;
-        requeued = outcome.requeued;
-      } else {
-        log.debug(`${label} pull skipped: no pull transport configured`);
-      }
-    } catch (err) {
-      errors.push(recordError("pull", label, err));
-    }
-
-    // A backend reset is only discovered during pull, by which point this
-    // sync's push has already run. Upload the requeued history now so a single
-    // sync is enough to recover rather than leaving the gap open until the next.
-    if (requeued > 0) {
-      log.info(`${label} re-pushing history after backend reset`, { requeued });
-      await runPush();
-    }
-
-    await writeSyncOutcome(syncmeta, Date.now(), errors[0]?.message ?? null);
-
-    return { pushed, pulled, skipped, deadLettered, deferred: false, errors };
-  }
-
-  /** Runs `fn` under the cross-context lock when one is configured. */
-  async function withLock<T>(fn: () => Promise<T>, deferred: T): Promise<T> {
-    if (!config.lock) return fn();
-
-    const outcome = await config.lock.tryRun(lockName, fn);
-
-    if (!outcome.acquired) {
-      log.debug("sync deferred: lock held by another context", { lockName });
-      return deferred;
-    }
-
-    return outcome.result;
-  }
-
-  async function tracked<T extends SyncResult>(
-    trigger: SyncTrigger,
-    fn: () => Promise<T>,
-  ): Promise<T> {
-    isSyncing = true;
-    notifyStatus();
-    emit("onSyncStart", { trigger });
-
-    try {
-      const result = await fn();
-      emit("onSyncComplete", { trigger, result });
-      return result;
-    } finally {
-      isSyncing = false;
-      notifyStatus();
-    }
-  }
-
-  function sync(): Promise<SyncResult> {
-    return runExclusive(async () => {
-      if (!syncEnabled) {
-        log.debug("sync skipped: sync disabled");
-        return emptyResult();
-      }
-
-      if (!transport) {
-        log.warn("sync skipped: no transport configured");
-        return emptyResult();
-      }
-
-      return withLock(
-        () =>
-          tracked("sync", async () => {
-            log.info("sync started");
-            const result = await pushPull("sync");
-            log.info("sync finished", {
-              pushed: result.pushed,
-              pulled: result.pulled,
-              skipped: result.skipped,
-              deadLettered: result.deadLettered,
-              errorCount: result.errors.length,
-            });
-            return result;
-          }),
-        emptyResult({ deferred: true }),
-      );
-    });
-  }
-
-  function manualSync(): Promise<ManualSyncResult> {
-    return runExclusive(() =>
-      withLock<ManualSyncResult>(
-        () =>
-          tracked("manualSync", async () => {
-            log.info("manual sync started");
-
-            await outbox.preload();
-            await inbox.preload();
-
-            let result: SyncResult = emptyResult();
-
-            if (syncEnabled && transport) {
-              result = await pushPull("manual sync");
-            } else if (!syncEnabled) {
-              log.debug("manual sync push/pull skipped: sync disabled");
-            } else {
-              log.warn("manual sync: no transport configured, skipping push/pull");
-            }
-
-            const errors = [...result.errors];
-            let replayed = 0;
-
-            try {
-              const outcome = await replayInbox(inbox, replayContext);
-              replayed = outcome.applied;
-              result = { ...result, skipped: result.skipped + outcome.skipped };
-            } catch (err) {
-              errors.push(recordError("replay", "manual sync", err));
-            }
-
-            log.info("manual sync finished", {
-              pushed: result.pushed,
-              pulled: result.pulled,
-              skipped: result.skipped,
-              deadLettered: result.deadLettered,
-              replayed,
-              errorCount: errors.length,
-            });
-
-            return { ...result, replayed, errors };
-          }),
-        { ...emptyResult({ deferred: true }), replayed: 0 },
-      ),
-    );
-  }
-
-  function getSyncStatus(): SyncStatus {
-    let pendingCount = 0;
-    let failedCount = 0;
-
-    for (const entry of outbox.state.values()) {
-      if (entry.sync) continue;
-      pendingCount++;
-      if (entry.syncStatus === "failed") failedCount++;
-    }
-
-    const stored = readSyncMeta(syncmeta);
-
-    return {
-      isSyncing,
-      isSynced: pendingCount === 0,
-      pendingCount,
-      failedCount,
-      deadLetterCount: deadletter.state.size,
-      pullCursor: readPullCursor(syncmeta, inbox),
-      backendId: stored.backendId,
-      lastSyncAt: stored.lastSyncAt,
-      lastError: stored.lastError,
-    };
-  }
-
-  function subscribeSyncStatus(listener: (status: SyncStatus) => void): () => void {
-    statusListeners.add(listener);
-    listener(getSyncStatus());
-    return () => statusListeners.delete(listener);
-  }
-
-  /**
-   * Retries dead-lettered events.
-   * - Outbound: pushes directly to the sync transport (does not requeue the outbox).
-   * - Inbound: requeues into the inbox and replays immediately.
-   * Omit `eventId` to retry everything. Returns how many were successfully
-   * cleared from the dead-letter queue.
-   */
-  function retryDeadLetter(eventId?: string): Promise<number> {
-    return runExclusive(async () => {
-      const targets = selectDeadLetters(deadletter, eventId);
-      const outbound: DeadLetterEntry[] = [];
-      let cleared = 0;
-      let inboundRequeued = 0;
-
-      for (const entry of targets) {
-        if ((entry.direction ?? "outbound") === "inbound") {
-          await requeueInboundDeadLetter(inbox, entry);
-          await deadletter.delete(entry.eventId).isPersisted.promise;
-          inboundRequeued++;
-          cleared++;
-        } else {
-          outbound.push(entry);
-        }
-      }
-
-      if (inboundRequeued > 0) {
-        await replayInbox(inbox, replayContext);
-      }
-
-      if (outbound.length > 0) {
-        if (!transport?.push) {
-          throw new Error(
-            "Cannot retry outbound dead-letter events: no push transport is configured.",
-          );
-        }
-
-        const events: OutboundEvent[] = outbound.map((entry) =>
-          toOutboundEvent({
-            eventId: entry.eventId,
-            collectionId: entry.collectionId,
-            type: entry.type,
-            key: entry.key,
-            payload: entry.payload,
-            previous: entry.previous,
-            txId: entry.txId ?? entry.eventId,
-            clientId: entry.clientId ?? clientId.value,
-            schemaVersion: entry.schemaVersion,
-            baseVersion: entry.baseVersion ?? null,
-            timestamp: entry.timestamp,
-            localSeq: entry.localSeq ?? 0,
-            globalSeq: null,
-            sync: false,
-            syncStatus: "pending",
-            attemptCount: entry.attemptCount,
-            lastAttemptAt: null,
-            nextAttemptAt: null,
-            lastError: null,
-            lastErrorCode: null,
-            retryable: null,
-          }),
-        );
-
-        const response = normalizePushResponse(await transport.push(events));
-        const confirmed = new Set(response.confirmed.map((item) => item.eventId));
-        const failedById = new Map((response.failed ?? []).map((item) => [item.eventId, item]));
-        const now = Date.now();
-
-        for (const confirmation of response.confirmed) {
-          const entry = outbound.find((row) => row.eventId === confirmation.eventId);
-          if (!entry) continue;
-
-          if (deadletter.has(entry.eventId)) {
-            await deadletter.delete(entry.eventId).isPersisted.promise;
-          }
-
-          if (conflictDetection) {
-            await recordRowVersion(
-              rowversions,
-              entry.collectionId,
-              entry.key,
-              entry.eventId,
-              confirmation.globalSeq,
-            );
-          }
-
-          emit("onEventPushed", {
-            eventId: confirmation.eventId,
-            globalSeq: confirmation.globalSeq,
-          });
-          cleared++;
-        }
-
-        for (const entry of outbound) {
-          if (confirmed.has(entry.eventId)) continue;
-
-          const failure = failedById.get(entry.eventId);
-          const message = failure?.message ?? "push failed during dead-letter retry";
-          const code = failure?.code ?? null;
-
-          if (deadletter.has(entry.eventId)) {
-            await deadletter.update(entry.eventId, (draft) => {
-              draft.attemptCount = (draft.attemptCount ?? 0) + 1;
-              draft.message = message;
-              draft.code = code;
-              draft.failedAt = now;
-            }).isPersisted.promise;
-          }
-        }
-
-        log.info("outbound dead-letter events pushed", {
-          attempted: outbound.length,
-          confirmed: response.confirmed.length,
-          failed: response.failed?.length ?? 0,
-        });
-      } else {
-        log.info("dead-letter events retried", {
-          count: targets.length,
-          inbound: inboundRequeued,
-        });
-      }
-
-      return cleared;
-    });
-  }
-
-  function discardDeadLetter(eventId?: string): Promise<number> {
-    return runExclusive(async () => {
-      const targets = selectDeadLetters(deadletter, eventId);
-
-      for (const entry of targets) {
-        await deadletter.delete(entry.eventId).isPersisted.promise;
-      }
-
-      log.info("dead-letter events discarded", { count: targets.length });
-
-      return targets.length;
-    });
-  }
-
-  function pruneSyncedEvents(options: PruneOptions = {}): Promise<PruneResult> {
-    return runExclusive(async () => {
-      const olderThanMs = Math.max(0, options.olderThanMs ?? 0);
-      const keepLast = Math.max(0, options.keepLast ?? 0);
-      const cutoff = Date.now() - olderThanMs;
-
-      // The cursor is derived partly from resolved inbox rows, so persist it
-      // before those rows are removed.
-      await writePullCursor(syncmeta, readPullCursor(syncmeta, inbox));
-
-      const outboxTargets = trimKeepLast(
-        [...outbox.state.values()]
-          .filter((entry) => entry.sync && entry.timestamp <= cutoff)
-          .sort((a, b) => a.localSeq - b.localSeq),
-        keepLast,
-      );
-
-      const inboxTargets = trimKeepLast(
-        [...inbox.state.values()]
-          .filter((entry) => entry.sync && entry.timestamp <= cutoff)
-          .sort((a, b) => a.globalSeq - b.globalSeq),
-        keepLast,
-      );
-
-      for (const entry of outboxTargets) {
-        await outbox.delete(entry.eventId).isPersisted.promise;
-      }
-
-      for (const entry of inboxTargets) {
-        await inbox.delete(entry.eventId).isPersisted.promise;
-      }
-
-      log.info("pruned synced events", {
-        outbox: outboxTargets.length,
-        inbox: inboxTargets.length,
-      });
-
-      return { outbox: outboxTargets.length, inbox: inboxTargets.length };
-    });
-  }
-
-  function resetLocalReplica(
-    options: ResetLocalReplicaOptions = {},
-  ): Promise<ResetLocalReplicaResult> {
-    const deferred: ResetLocalReplicaResult = {
-      deferred: true,
-      removedRows: 0,
-      discardedPending: 0,
-      clientId: clientId.value,
-    };
-
-    return runExclusive(() =>
-      withLock(async () => {
-        const pending = [...outbox.state.values()].filter((entry) => !entry.sync);
-        if (pending.length > 0 && options.discardPending !== true) {
-          throw new UnsyncedChangesError(pending.length);
-        }
-
-        // acceptMutations is the replay path: it writes the collection and its
-        // persistence without calling onDelete, so no outbox event is authored.
-        let removedRows = 0;
-        for (const { collectionId, collection } of syncedCollections) {
-          const target = replayTargets[collectionId];
-          const rows = [...collection.state.entries()];
-          if (rows.length === 0 || !target?.utils.acceptMutations) continue;
-
-          await target.utils.acceptMutations({
-            mutations: rows.map(([key, row]) => ({
-              mutationId: generateEventId(),
-              type: "delete" as const,
-              key,
-              modified: row,
-              original: row,
-              changes: row,
-              collection: target,
-            })),
-          });
-          removedRows += rows.length;
-        }
-
-        for (const meta of [outbox, inbox, deadletter] as const) {
-          for (const eventId of [...meta.state.keys()]) {
-            await meta.delete(eventId).isPersisted.promise;
-          }
-        }
-        for (const id of [...rowversions.state.keys()]) {
-          await rowversions.delete(id).isPersisted.promise;
-        }
-
-        // Pulled events are skipped when their clientId is ours. A fresh id
-        // makes this device's own history replay like anyone else's.
-        clientId.value = generateEventId();
-        await ensureSyncMeta(syncmeta);
-        await syncmeta.update(SYNCMETA_KEY, (draft) => {
-          draft.clientId = clientId.value;
-          draft.pullCursor = 0;
-          draft.lastError = null;
-          // Re-recorded on the next pull, so a reset is how a "fail" client
-          // accepts a rebuilt backend.
-          draft.backendId = null;
-        }).isPersisted.promise;
-
-        log.warn("local replica reset", {
-          removedRows,
-          discardedPending: pending.length,
-          clientId: clientId.value,
-        });
-        notifyStatus();
-
-        return {
-          deferred: false,
-          removedRows,
-          discardedPending: pending.length,
-          clientId: clientId.value,
-        };
-      }, deferred),
-    );
-  }
+  const runtime = {
+    outbox,
+    inbox,
+    deadletter,
+    syncmeta,
+    rowversions,
+    transport,
+    clientId,
+    replayContext,
+    replayTargets,
+    syncedCollections,
+    emit,
+    log,
+    retry,
+    pullOverlap,
+    recordLocalEchoes,
+    backendMismatch,
+    conflictDetection,
+    lock: config.lock,
+    lockName,
+    runExclusive,
+    getSyncEnabled: () => syncEnabled,
+    getPushLimits: () => pushLimits,
+    isSyncing: () => isSyncing,
+    setSyncing: (value: boolean) => {
+      isSyncing = value;
+    },
+    notifyStatus,
+    statusListeners,
+  } satisfies SyncRuntime;
+
+  const cycle = createSyncCycle(runtime);
+  readStatus = cycle.getSyncStatus;
+  const maintenance = createMaintenance(runtime, cycle.withLock);
 
   function getSyncEnabled(): boolean {
     return syncEnabled;
@@ -876,14 +373,14 @@ export async function createEventSourcedDB<
 
   return {
     collections,
-    sync,
-    manualSync,
+    sync: cycle.sync,
+    manualSync: cycle.manualSync,
     getSyncEnabled,
     setSyncEnabled,
-    getSyncStatus,
-    subscribeSyncStatus,
-    retryDeadLetter,
-    discardDeadLetter,
+    getSyncStatus: cycle.getSyncStatus,
+    subscribeSyncStatus: cycle.subscribeSyncStatus,
+    retryDeadLetter: maintenance.retryDeadLetter,
+    discardDeadLetter: maintenance.discardDeadLetter,
     getPushLimits: () => pushLimits,
     setPushLimits(next: Partial<SyncPushLimits>) {
       pushLimits = resolvePushLimits({
@@ -895,231 +392,20 @@ export async function createEventSourcedDB<
       log.info("push limits updated", pushLimits);
       return pushLimits;
     },
-    pruneSyncedEvents,
-    resetLocalReplica,
+    pruneSyncedEvents: maintenance.pruneSyncedEvents,
+    compact: () =>
+      compactOutbox(syncedCollections, outbox, (pending) => {
+        const latest = pending[pending.length - 1]!;
+        const now = Date.now();
+        return outboxEntry(latest, squashedEntry(pending, latest.payload, now), {
+          outbox,
+          seq,
+          eventId: generateEventId(),
+          txId: generateEventId(),
+          timestamp: now,
+        });
+      }),
+    resetLocalReplica: maintenance.resetLocalReplica,
     dispose,
   };
-}
-
-function selectDeadLetters(
-  deadletter: Collection<DeadLetterEntry, string>,
-  eventId?: string,
-): DeadLetterEntry[] {
-  if (eventId === undefined) {
-    return [...deadletter.state.values()].sort(
-      (a, b) => (a.localSeq ?? a.globalSeq ?? 0) - (b.localSeq ?? b.globalSeq ?? 0),
-    );
-  }
-
-  const entry = deadletter.get(eventId);
-  return entry ? [entry] : [];
-}
-
-/** Puts a parked inbound event back in the inbox so replay can pick it up again. */
-async function requeueInboundDeadLetter(
-  inbox: Collection<InboxEntry, string>,
-  entry: DeadLetterEntry,
-): Promise<void> {
-  if (inbox.has(entry.eventId)) {
-    await inbox.update(entry.eventId, (draft) => {
-      draft.sync = false;
-      draft.skipped = false;
-      draft.skipReason = null;
-      draft.attemptCount = 0;
-      draft.lastError = null;
-    }).isPersisted.promise;
-    return;
-  }
-
-  await inbox.insert({
-    eventId: entry.eventId,
-    globalSeq: entry.globalSeq ?? 0,
-    collectionId: entry.collectionId,
-    type: entry.type,
-    key: entry.key,
-    payload: entry.payload,
-    previous: entry.previous,
-    clientId: entry.clientId,
-    schemaVersion: entry.schemaVersion,
-    timestamp: entry.timestamp,
-    sync: false,
-    skipped: false,
-    skipReason: null,
-    attemptCount: 0,
-    lastError: null,
-  }).isPersisted.promise;
-}
-
-/** Drops the newest `keepLast` items from an ascending-sorted removal list. */
-function trimKeepLast<T>(items: ReadonlyArray<T>, keepLast: number): T[] {
-  if (keepLast <= 0) return [...items];
-  return items.slice(0, Math.max(0, items.length - keepLast));
-}
-
-function createMetaCollection<TEntry extends object>(
-  config: MetaCollectionFactory,
-  id: string,
-  getKey: (entry: TEntry) => string,
-  schemaVersion: number,
-): Collection<TEntry, string> {
-  const options = config.persistedCollectionOptions<TEntry, string>({
-    id,
-    getKey,
-    persistence: config.persistence,
-    schemaVersion,
-  });
-
-  return config.createCollection(options);
-}
-
-type IndexableCollection = {
-  createIndex: (
-    indexCallback: (row: Record<string, unknown>) => unknown,
-    config?: {
-      name?: string;
-      indexType?: new (id: number, expression: never, name?: string, options?: never) => unknown;
-    },
-  ) => unknown;
-  getIndexMetadata?: () => ReadonlyArray<unknown>;
-  on?: (event: "status:ready", callback: () => void) => () => void;
-};
-
-function applyCollectionIndexes(
-  collection: Collection<Record<string, unknown>, string | number>,
-  collectionId: string,
-  indexes: CollectionDefConstraint["indexes"],
-  log: EventSourcedLogger,
-): void {
-  if (!indexes?.length) return;
-
-  const indexable = collection as IndexableCollection;
-
-  const register = (): void => {
-    if ((indexable.getIndexMetadata?.().length ?? 0) > 0) return;
-
-    for (const indexDef of indexes) {
-      indexable.createIndex(indexDef.select as (row: Record<string, unknown>) => unknown, {
-        name: indexDef.name,
-        indexType: indexDef.indexType,
-      });
-
-      log.debug("registered collection index", { collectionId, name: indexDef.name });
-    }
-  };
-
-  register();
-
-  indexable.on?.("status:ready", register);
-}
-
-/** Handler for `localOnly` collections: persist locally, author no event. */
-async function noOutboxHook(): Promise<Record<string, unknown>> {
-  return {};
-}
-
-function createMutationHook(context: MutationContext) {
-  const {
-    outbox,
-    rowversions,
-    collectionId,
-    type,
-    seq,
-    clientId,
-    eventSchemaVersion,
-    conflictDetection,
-    emit,
-    log,
-  } = context;
-
-  return async (params: MutationHookParams): Promise<Record<string, unknown>> => {
-    const txId = generateEventId();
-    const timestamp = Date.now();
-
-    for (const mutation of params.transaction.mutations) {
-      const payload = type === "delete" ? mutation.original : mutation.modified;
-      const eventId = generateEventId();
-
-      const entry: OutboxEntry = {
-        eventId,
-        collectionId,
-        type,
-        key: mutation.key,
-        payload,
-        previous: type === "insert" ? null : mutation.original,
-        txId,
-        clientId: clientId.value,
-        schemaVersion: eventSchemaVersion,
-        baseVersion: conflictDetection
-          ? readRowVersion(rowversions, collectionId, mutation.key)
-          : null,
-        timestamp,
-        localSeq: allocateLocalSeq(outbox, seq),
-        globalSeq: null,
-        sync: false,
-        syncStatus: "pending",
-        attemptCount: 0,
-        lastAttemptAt: null,
-        nextAttemptAt: null,
-        lastError: null,
-        lastErrorCode: null,
-        retryable: null,
-      };
-
-      await outbox.insert(entry).isPersisted.promise;
-
-      if (conflictDetection) {
-        await recordRowVersion(rowversions, collectionId, mutation.key, eventId, null);
-      }
-
-      log.debug("outbox entry created", {
-        eventId,
-        collectionId,
-        type,
-        key: entry.key,
-        localSeq: entry.localSeq,
-        txId,
-      });
-
-      emit("onMutation", entry);
-    }
-
-    return {};
-  };
-}
-
-/**
- * Reads the high-water mark from live outbox state rather than trusting the
- * cached counter alone, so a second tab writing to the same persisted store
- * cannot hand out a localSeq that has already been used.
- */
-function allocateLocalSeq(outbox: Collection<OutboxEntry, string>, seq: SeqCounter): number {
-  const allocated = Math.max(seq.value, nextLocalSeq(outbox));
-  seq.value = allocated + 1;
-  return allocated;
-}
-
-function nextLocalSeq(outbox: Collection<OutboxEntry, string>): number {
-  let max = -1;
-
-  for (const entry of outbox.state.values()) {
-    if (entry.localSeq > max) max = entry.localSeq;
-  }
-
-  return max + 1;
-}
-
-function assertReservedNamesAvailable(collections: Record<string, unknown>): void {
-  for (const id of Object.keys(collections)) {
-    if (RESERVED_IDS.has(id)) {
-      throw new Error(
-        `Collection id "${id}" is reserved. Built-in collections are: ${[...RESERVED_IDS]
-          .map((name) => `"${name}"`)
-          .join(", ")}.`,
-      );
-    }
-  }
-}
-
-function toError(err: unknown): Error {
-  return err instanceof Error ? err : new Error(String(err));
 }

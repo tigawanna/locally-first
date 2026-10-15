@@ -67,6 +67,13 @@ export type DeadLetterReason =
   /** An inbound event whose replay kept throwing. */
   | "replayFailed";
 
+export type CompactOutboxResult = {
+  /** Keys whose pending chain was replaced by one event. */
+  compacted: number;
+  /** Pending events removed because a later event now covers them. */
+  removed: number;
+};
+
 export type OutboxEntry = {
   eventId: string;
   collectionId: string;
@@ -98,6 +105,14 @@ export type OutboxEntry = {
   lastError: string | null;
   lastErrorCode: string | null;
   retryable: boolean | null;
+  /**
+   * True when this event replaces a chain of local mutations for the same row.
+   * Servers should merge it with any newer events for that row, not drop them.
+   * See `docs/compaction.md`.
+   */
+  compaction?: boolean;
+  /** When this device squashed the chain. Absent on ordinary events. */
+  compactedAt?: number | null;
 };
 
 export type InboxEntry = {
@@ -732,6 +747,14 @@ export interface EventSourcedSharedOptions {
    */
   recordLocalEchoes?: boolean;
   /**
+   * When `true` (default), an update does not append another outbox event if
+   * this device still has unsynced events for that row. Those events are
+   * replaced by one event carrying the latest row, marked `compaction` with
+   * `compactedAt`. Set `false` to keep every edit as its own event and call
+   * `compact()` yourself. See `docs/compaction.md`.
+   */
+  compactOnWrite?: boolean;
+  /**
    * Version stamped on every newly authored outbox event. Defaults to 1.
    * Bump this when you change a collection's row shape, and provide
    * `upcastEvent` so older events can be migrated (or skipped) on replay.
@@ -881,6 +904,12 @@ export type EventSourcedDB<TDefs extends Record<string, CollectionDefConstraint>
    * rows. Safe because the pull cursor lives in `syncmeta`, not in the inbox.
    */
   pruneSyncedEvents: (options?: PruneOptions) => Promise<PruneResult>;
+  /**
+   * For each row in each synced collection, folds that row's outbox events
+   * since its latest compaction into one `compaction` event. Synced events are
+   * included. The new event is what the next `sync()` pushes.
+   */
+  compact: () => Promise<CompactOutboxResult>;
   /**
    * Empties this device's copy so the next sync rebuilds it from the server.
    * Rows are removed through the replay path, so no delete events are pushed.

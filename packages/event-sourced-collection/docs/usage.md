@@ -16,7 +16,9 @@ Design internals (push/pull pipeline, lock election, dead-letter reasons): see
 
 ## Mental model
 
-Every local `insert` / `update` / `delete` appends an **outbox** event. Sync
+Every local `insert` / `update` / `delete` appends an **outbox** event. With
+`compactOnWrite` (the default), a later update replaces the unsynced chain for
+that row with one event instead of appending another partial update. Sync
 **pushes** due outbox events, **pulls** server events into the **inbox**, then
 **replays** the inbox into your collections. Options below tune that loop —
 they do not change how you read/write collections day to day.
