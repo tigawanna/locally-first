@@ -14,10 +14,12 @@ import type {
   PushResponse,
   RetryConfig,
   ServerEvent,
+  SyncBatchOptions,
   SyncLock,
   UnknownEventHandling,
   UpcastEventFn,
 } from "../../core/types";
+import { SyncBatchLimitError } from "../../core/event-sourced-db/errors";
 import {
   makeTodo,
   openEventSourcedDb,
@@ -48,6 +50,7 @@ type CreateDbOptions = {
   lock?: SyncLock;
   hooks?: EventSourcedHooks;
   syncEnabled?: boolean;
+  syncBatch?: SyncBatchOptions;
   createCollection?: CreateCollectionFn;
 };
 
@@ -940,6 +943,28 @@ describe("manualSync", () => {
 
     expect(result).toMatchObject({ pushed: 0, pulled: 1, replayed: 0 });
     expect(result.errors).toEqual([]);
+  });
+
+  it("holds a manual sync until enough events are waiting, then allows it", async () => {
+    const db = await createDb({
+      sync: {
+        push: async (events) => ({
+          confirmed: events.map((event) => ({ eventId: event.eventId, globalSeq: 1 })),
+        }),
+        pull: async () => ({ events: [], cursor: "0", hasMore: false }),
+      },
+      syncBatch: { minEvents: 2, delayMinutes: 10 },
+    });
+
+    await db.collections.todos.insert(makeTodo("t1")).isPersisted.promise;
+    await expect(db.manualSync()).rejects.toBeInstanceOf(SyncBatchLimitError);
+
+    await db.collections.todos.insert(makeTodo("t2")).isPersisted.promise;
+    const result = await db.manualSync();
+    expect(result.pushed).toBe(2);
+
+    await db.collections.todos.insert(makeTodo("t3")).isPersisted.promise;
+    await expect(db.sync()).rejects.toBeInstanceOf(SyncBatchLimitError);
   });
 });
 

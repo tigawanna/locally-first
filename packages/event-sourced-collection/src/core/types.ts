@@ -538,6 +538,16 @@ export type SyncLock = {
 
 export type SyncPushPreset = "default" | "serverless" | "vercel";
 
+/**
+ * When a sync is allowed to push. `delayMinutes` is the minimum gap after the
+ * last sync. `minEvents` is how many unpushed outbox events open the gate
+ * early. With both, either condition is enough.
+ */
+export type SyncBatchOptions = {
+  delayMinutes?: number;
+  minEvents?: number;
+};
+
 export type SyncPushLimits = {
   pushBatchSize: number;
   maxPushBytes: number | null;
@@ -795,6 +805,17 @@ export interface EventSourcedSharedOptions {
    * Unset means no byte limit.
    */
   maxPushBytes?: number;
+  /**
+   * Holds `sync()` and `manualSync()` until enough unpushed events have piled
+   * up, or until enough time has passed since the last sync. Provide either
+   * limit, or both. With both, whichever arrives first allows the sync: a
+   * burst of `minEvents` pushes immediately, and a quieter period pushes
+   * whatever is waiting once `delayMinutes` has elapsed. Before the first sync
+   * that clock starts at the oldest unpushed event. A sync with nothing to
+   * push still runs, so pulls are not held back. Calling either method too
+   * early throws {@link SyncBatchLimitError}.
+   */
+  syncBatch?: SyncBatchOptions;
   /**
    * What to do when the server reports a different `backendId` than last sync
    * (wiped or swapped database). Defaults to `"resetCursor"`: clear the inbox,

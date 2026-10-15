@@ -30,6 +30,23 @@ release. Add a tool name to select part of the graph. For example, run
 
 Use descriptive variable and function names. The name should say what the value is or what the function does, so a reader does not have to open the implementation to tell `pendingOutboxEntries` from `syncedOutboxEntries`.
 
+## Prefer readable branches
+
+A ternary is fine when both sides are values: `status === "synced" ? syncedLabel : pendingLabel`.
+
+Stop there. Once a branch is another conditional, or it calls a function that does real work, write it as `if` statements. Declare the result with `let` and assign it inside each block. Readability comes before a shorter expression.
+
+```ts
+let nextEntry = existingEntry;
+if (operation === "delete") {
+  nextEntry = tombstone(existingEntry);
+} else if (operation === "update") {
+  nextEntry = mergeUpdate(existingEntry, payload);
+} else {
+  nextEntry = insertEntry(payload);
+}
+```
+
 ## Check assumptions with a short script
 
 Before locking an implementation or adding tests, run a small Node script against the real code when the behavior is uncertain. Throwaway scripts live in `packages/event-sourced-collection/scripts/collection-test-scripts/` (for example `check-compaction.ts`). Run one with `pnpm exec tsx` from that package:

@@ -5,6 +5,30 @@ import type { SyncResult } from "../types";
  * Thrown by `resetLocalReplica()` while the outbox still holds changes the
  * server has not accepted. Sync first, or pass `discardPending: true`.
  */
+/**
+ * Thrown by `sync()` and `manualSync()` while `syncBatch` says it is too soon.
+ * Either more unpushed events are required, or the delay since the last sync
+ * has not elapsed. When both limits are set, either one is enough to allow sync.
+ */
+export class SyncBatchLimitError extends Error {
+  readonly pendingCount: number;
+  readonly minEvents: number | null;
+  readonly delayRemainingMs: number | null;
+
+  constructor(input: {
+    pendingCount: number;
+    minEvents: number | null;
+    delayRemainingMs: number | null;
+    message: string;
+  }) {
+    super(input.message);
+    this.name = "SyncBatchLimitError";
+    this.pendingCount = input.pendingCount;
+    this.minEvents = input.minEvents;
+    this.delayRemainingMs = input.delayRemainingMs;
+  }
+}
+
 export class UnsyncedChangesError extends Error {
   constructor(readonly pendingCount: number) {
     super(`${pendingCount} local change(s) have not been pushed yet`);

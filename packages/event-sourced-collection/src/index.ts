@@ -1,4 +1,8 @@
-export { createEventSourcedDB, UnsyncedChangesError } from "./core/create-event-sourced-db";
+export {
+  createEventSourcedDB,
+  SyncBatchLimitError,
+  UnsyncedChangesError,
+} from "./core/create-event-sourced-db";
 export { createEventSourcedDBHandle, resolveModules } from "./core/create-event-sourced-db-handle";
 export { createLazySingleton } from "./core/lazy-singleton";
 export { createHttpTransport, SyncPushError, SyncPullError } from "./core/sync";
@@ -65,6 +69,7 @@ export type {
   SyncMetaEntry,
   SQLiteDriver,
   SyncPhase,
+  SyncBatchOptions,
   SyncPushLimits,
   SyncPushPreset,
   SyncResult,

@@ -49,7 +49,7 @@ import type { SyncRuntime } from "./event-sourced-db/runtime";
 import { createSyncCycle } from "./event-sourced-db/sync-cycle";
 import { assertReservedNamesAvailable } from "./event-sourced-db/errors";
 
-export { UnsyncedChangesError } from "./event-sourced-db/errors";
+export { SyncBatchLimitError, UnsyncedChangesError } from "./event-sourced-db/errors";
 
 type CollectionDefConstraint = {
   getKey: (state: never) => string | number;
@@ -342,6 +342,7 @@ export async function createEventSourcedDB<
     runExclusive,
     getSyncEnabled: () => syncEnabled,
     getPushLimits: () => pushLimits,
+    syncBatch: config.syncBatch,
     isSyncing: () => isSyncing,
     setSyncing: (value: boolean) => {
       isSyncing = value;

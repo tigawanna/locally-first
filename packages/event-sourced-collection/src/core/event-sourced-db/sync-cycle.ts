@@ -3,7 +3,8 @@ import { pushOutbox } from "../../internal/push";
 import { replayInbox } from "../../internal/replay";
 import { readPullCursor, readSyncMeta, writeSyncOutcome } from "../../internal/sync-meta";
 import type { ManualSyncResult, SyncResult, SyncStatus, SyncTrigger } from "../types";
-import { emptyResult, toError } from "./errors";
+import { emptyResult, SyncBatchLimitError, toError } from "./errors";
+import { decideSyncBatch } from "./sync-batch";
 import type { SyncRuntime } from "./runtime";
 
 /** Push, pull, status, and the cross-context lock around one sync. */
@@ -28,6 +29,7 @@ export function createSyncCycle(deps: SyncRuntime) {
     runExclusive,
     getSyncEnabled,
     getPushLimits,
+    syncBatch,
     isSyncing,
     setSyncing,
     notifyStatus,
@@ -40,6 +42,33 @@ export function createSyncCycle(deps: SyncRuntime) {
     log.error(`${label} ${phase} failed`, { message: error.message });
     emit("onSyncError", { phase, error });
     return error;
+  }
+
+  /** Throws when `syncBatch` still wants more events or more time since the last sync. */
+  function assertSyncBatchOpen(): void {
+    let pendingCount = 0;
+    let oldestPendingAt: number | null = null;
+    for (const entry of outbox.state.values()) {
+      if (entry.sync) continue;
+      pendingCount++;
+      if (oldestPendingAt === null || entry.timestamp < oldestPendingAt) {
+        oldestPendingAt = entry.timestamp;
+      }
+    }
+    const verdict = decideSyncBatch({
+      batch: syncBatch,
+      pendingCount,
+      lastSyncAt: readSyncMeta(syncmeta).lastSyncAt,
+      oldestPendingAt,
+      now: Date.now(),
+    });
+    if (verdict.allowed) return;
+    log.info("sync held by syncBatch", {
+      pendingCount: verdict.pendingCount,
+      minEvents: verdict.minEvents,
+      delayRemainingMs: verdict.delayRemainingMs,
+    });
+    throw new SyncBatchLimitError(verdict);
   }
 
   /** Pushes the outbox, pulls the inbox, and pushes again if a backend reset requeued history. */
@@ -169,6 +198,9 @@ export function createSyncCycle(deps: SyncRuntime) {
         return emptyResult();
       }
 
+      await outbox.preload();
+      assertSyncBatchOpen();
+
       return withLock(
         () =>
           tracked("sync", async () => {
@@ -190,8 +222,11 @@ export function createSyncCycle(deps: SyncRuntime) {
 
   /** Same as `sync`, then replays the inbox even when automatic sync is off. */
   function manualSync(): Promise<ManualSyncResult> {
-    return runExclusive(() =>
-      withLock<ManualSyncResult>(
+    return runExclusive(async () => {
+      await outbox.preload();
+      if (getSyncEnabled() && transport) assertSyncBatchOpen();
+
+      return withLock<ManualSyncResult>(
         () =>
           tracked("manualSync", async () => {
             log.info("manual sync started");
@@ -232,8 +267,8 @@ export function createSyncCycle(deps: SyncRuntime) {
             return { ...result, replayed, errors };
           }),
         { ...emptyResult({ deferred: true }), replayed: 0 },
-      ),
-    );
+      );
+    });
   }
 
   /** Counts pending and failed outbox rows and reads the stored cursor and last error. */

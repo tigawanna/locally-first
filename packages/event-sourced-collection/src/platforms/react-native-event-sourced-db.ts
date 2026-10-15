@@ -100,6 +100,7 @@ export function createReactNativeEventSourcedDB<
         upcastEvent: config.upcastEvent,
         retry: config.retry,
         pushBatchSize: config.pushBatchSize,
+        syncBatch: config.syncBatch,
         maxPushBytes: config.maxPushBytes,
         syncPreset: config.syncPreset,
         recordLocalEchoes: config.recordLocalEchoes,

@@ -15,6 +15,7 @@ import type {
   RowVersionEntry,
   SyncLock,
   SyncMetaEntry,
+  SyncBatchOptions,
   SyncPushLimits,
   SyncStatus,
 } from "../types";
@@ -46,6 +47,7 @@ export type SyncRuntime = {
   runExclusive: <T>(fn: () => Promise<T>) => Promise<T>;
   getSyncEnabled: () => boolean;
   getPushLimits: () => SyncPushLimits;
+  syncBatch: SyncBatchOptions | undefined;
   isSyncing: () => boolean;
   setSyncing: (value: boolean) => void;
   notifyStatus: () => void;
