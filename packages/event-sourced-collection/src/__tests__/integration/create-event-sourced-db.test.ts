@@ -47,6 +47,7 @@ type CreateDbOptions = {
   recordLocalEchoes?: boolean;
   backendMismatch?: BackendMismatchPolicy;
   conflictDetection?: boolean;
+  compactOnWrite?: boolean;
   lock?: SyncLock;
   hooks?: EventSourcedHooks;
   syncEnabled?: boolean;
@@ -208,7 +209,7 @@ describe("mutation logging", () => {
   });
 
   it("logs the modified payload for an update", async () => {
-    const db = await createDb();
+    const db = await createDb({ compactOnWrite: false });
 
     await db.collections.todos.insert(makeTodo("t1")).isPersisted.promise;
     await db.collections.todos.update("t1", (draft) => {
@@ -545,6 +546,7 @@ describe("dead-letter queue", () => {
   it("restores rowversions after a CONFLICT dead-letter", async () => {
     const db = await createDb({
       conflictDetection: true,
+      compactOnWrite: false,
       sync: {
         push: async (events) => ({
           confirmed: [],
@@ -876,7 +878,7 @@ describe("event metadata", () => {
   });
 
   it("records the pre-mutation state so updates and deletes are invertible", async () => {
-    const db = await createDb();
+    const db = await createDb({ compactOnWrite: false });
 
     await db.collections.todos.insert(makeTodo("t1", "Before")).isPersisted.promise;
     await db.collections.todos.update("t1", (draft) => {
@@ -1246,7 +1248,7 @@ describe("event schema versions", () => {
 
 describe("conflict detection", () => {
   it("stamps baseVersion from the previously applied event", async () => {
-    const db = await createDb({ conflictDetection: true });
+    const db = await createDb({ conflictDetection: true, compactOnWrite: false });
 
     await db.collections.todos.insert(makeTodo("t1")).isPersisted.promise;
     const insertId = outboxRows(db)[0]!.eventId;

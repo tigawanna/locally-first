@@ -17,7 +17,13 @@ import {
 type Overrides = Partial<
   Pick<
     EventSourcedDBConfig<TodoDefs>,
-    "clientId" | "pullOverlap" | "retry" | "pushBatchSize" | "createCollection" | "backendMismatch"
+    | "clientId"
+    | "pullOverlap"
+    | "retry"
+    | "pushBatchSize"
+    | "createCollection"
+    | "backendMismatch"
+    | "compactOnWrite"
   >
 >;
 
@@ -33,6 +39,7 @@ function createDb(
     pushBatchSize: overrides.pushBatchSize,
     createCollection: overrides.createCollection,
     backendMismatch: overrides.backendMismatch,
+    compactOnWrite: overrides.compactOnWrite,
   });
 }
 
@@ -43,8 +50,8 @@ function todosOf(db: EventSourcedDB<TodoDefs>): Todo[] {
 describe("cross-device convergence", () => {
   it("carries inserts, updates and deletes across the boundary and converges", async () => {
     const backend = createMockSyncBackend();
-    const a = await createDb(backend, { clientId: "a" });
-    const b = await createDb(backend, { clientId: "b" });
+    const a = await createDb(backend, { clientId: "a", compactOnWrite: false });
+    const b = await createDb(backend, { clientId: "b", compactOnWrite: false });
 
     for (let index = 0; index < 10; index++) {
       await a.collections.todos.insert(makeTodo(`t${index}`)).isPersisted.promise;
@@ -88,8 +95,16 @@ describe("cross-device convergence", () => {
   it("never applies a device's own events twice when pages overlap", async () => {
     const backend = createMockSyncBackend();
     // Rewinds far enough that every sync re-delivers the entire history.
-    const a = await createDb(backend, { clientId: "a", pullOverlap: 1_000 });
-    const b = await createDb(backend, { clientId: "b", pullOverlap: 1_000 });
+    const a = await createDb(backend, {
+      clientId: "a",
+      pullOverlap: 1_000,
+      compactOnWrite: false,
+    });
+    const b = await createDb(backend, {
+      clientId: "b",
+      pullOverlap: 1_000,
+      compactOnWrite: false,
+    });
 
     await a.collections.todos.insert(makeTodo("t1")).isPersisted.promise;
     await a.collections.todos.update("t1", (draft) => {
