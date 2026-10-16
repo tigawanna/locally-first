@@ -245,19 +245,39 @@ export type EventSourcedHooks = {
 
 ---
 
+### 5.2 Push 100 compacted events
+
+**Status:** Not Implemented
+
+`event-sourced-collection` now pushes at most **100 events per request** (`MAX_PUSH_BATCH_SIZE`). With `compactOnWrite`, those 100 are dirty rows, not keystrokes: repeated edits of one row stay one event. `remotePushEvents` already accepts an array of that size and has no smaller cap. This engine does not produce or understand that batch yet.
+
+**Implement:**
+
+- Clamp `pushBatchSize` to 1–100. The default stays 100, matching this engine's `DEFAULT_PUSH_BATCH_SIZE` and the collection hard cap.
+- `compactOnWrite` (default `true`). An update folds the unsynced insert/update tail for that row into one event with `compaction: true` and `compactedAt`. Keep that event's `eventId`, `localSeq`, and `txId` so it stays in its transaction. Do not rewrite a row whose push is already in flight.
+- `compact()` folds only that unsynced tail. Events the server has already accepted stay.
+- Put `compaction` and `compactedAt` on `OutboundEvent` in `src/core/protocol.ts` and send them. Mirror the fields in `event-sourced-collection` (already there) and persist them in `apps/example/src/server/sync/remote.ts`.
+- On ingest, merge a compacted event with newer events for that row. Do not drop those newer events. See `event-sourced-collection/docs/compaction.md`.
+- `syncBatch` (`minEvents` and/or `delayMinutes`) holds only the push. Pull still runs. Report the hold on the result instead of throwing. A failed push must not move `lastSyncAt`. `minEvents` counts outbox rows, so one compacted row counts once.
+
+**Priority:** High - This is the batch the collection client already sends
+
+---
+
 ## Priority Summary
 
-| Feature                 | Priority | Effort | Impact         | Status          |
-| ----------------------- | -------- | ------ | -------------- | --------------- |
-| Schema Validation       | Low      | Small  | DX             | Not Implemented |
-| Virtual Properties      | Low      | Small  | DX             | **DONE**        |
-| Error Types             | Medium   | Medium | DX, Debugging  | **DONE**        |
-| Protocol Types          | Medium   | Small  | Backend Compat | **DONE**        |
-| Optimistic State        | Medium   | Medium | UX             | **DONE**        |
-| Ambient Transactions    | Medium   | Medium | DX             | **DONE**        |
-| Hook System Enhancement | Low      | Small  | Observability  | Not Implemented |
-| Truncate Support        | Low      | Small  | Edge Cases     | Not Implemented |
-| Conflict Resolution     | Medium   | Medium | Data Integrity | Not Implemented |
+| Feature                   | Priority | Effort | Impact         | Status          |
+| ------------------------- | -------- | ------ | -------------- | --------------- |
+| Schema Validation         | Low      | Small  | DX             | Not Implemented |
+| Virtual Properties        | Low      | Small  | DX             | **DONE**        |
+| Error Types               | Medium   | Medium | DX, Debugging  | **DONE**        |
+| Protocol Types            | Medium   | Small  | Backend Compat | **DONE**        |
+| Optimistic State          | Medium   | Medium | UX             | **DONE**        |
+| Ambient Transactions      | Medium   | Medium | DX             | **DONE**        |
+| Hook System Enhancement   | Low      | Small  | Observability  | Not Implemented |
+| Truncate Support          | Low      | Small  | Edge Cases     | Not Implemented |
+| Conflict Resolution       | Medium   | Medium | Data Integrity | Not Implemented |
+| Push 100 compacted events | High     | Medium | Sync           | Not Implemented |
 
 ---
 
@@ -269,6 +289,7 @@ export type EventSourcedHooks = {
 4. ~~**Virtual Properties**~~ — DONE
 5. ~~**Optimistic State**~~ — DONE
 6. **Conflict Resolution** — Next critical feature for production
+7. **Push 100 compacted events** — Match the collection client's batch: compaction on write, `compaction` / `compactedAt` on the wire, and a push cap of 100
 
 ---
 
