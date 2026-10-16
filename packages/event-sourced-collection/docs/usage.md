@@ -220,6 +220,29 @@ pushBatchSize: 100,
 
 ---
 
+## `syncBatch`
+
+**Default:** unset (every sync may push)
+
+Holds the **push** until either `minEvents` unpushed outbox rows are waiting, or
+`delayMinutes` have passed since the last successful push. Pull still runs.
+With both limits, whichever arrives first allows the push. Before the first
+successful push the delay starts at the oldest unpushed event. A failed push
+does not restart that clock.
+
+`minEvents` counts outbox rows. With `compactOnWrite` (the default), repeated
+edits of one row stay one event, so this follows dirty rows rather than
+keystrokes.
+
+When the push is held, `sync()` and `manualSync()` resolve with `batchHold`
+set. They do not throw.
+
+```ts
+syncBatch: { minEvents: 20, delayMinutes: 10 },
+```
+
+---
+
 ## `backendMismatch`
 
 **Default:** `"resetCursor"`

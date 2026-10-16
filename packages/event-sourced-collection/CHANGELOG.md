@@ -12,8 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `compactOnWrite` (default `true`). An update replaces the unsynced outbox chain
   for that row with one `compaction` event carrying `compactedAt`, instead of
   appending another partial update. `db.compact()` folds a log that was written
-  with the option off. Server guidance is in `docs/compaction.md`: merge the
-  compacted event with newer upstream updates, do not drop them.
+  with the option off. The folded event keeps its place in the queue and its
+  transaction, and `compaction` / `compactedAt` are sent on push. Server
+  guidance is in `docs/compaction.md`: merge the compacted event with newer
+  upstream updates, do not drop them.
+- `syncBatch` (`minEvents` and/or `delayMinutes`). Holds the push until enough
+  unpushed rows are waiting or the delay has elapsed. Pull still runs. A held
+  push is reported as `SyncResult.batchHold` (`SyncBatchLimitError` fields) and
+  is not thrown. With `compactOnWrite`, `minEvents` counts outbox rows, so
+  repeated edits of one row count once.
+- `db.compact()`. Folds unsynced insert/update tails. Already-synced events stay.
 
 ## [0.0.10] - 2026-09-08
 

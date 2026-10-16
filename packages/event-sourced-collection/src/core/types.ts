@@ -5,6 +5,7 @@ import type {
 } from "@tanstack/db-sqlite-persistence-core";
 import type { CreateCollectionFn, PersistedCollectionOptionsFn } from "./persisted-collection";
 import type { EventSourcedLogger } from "../utils/logger";
+import type { SyncBatchLimitError } from "./event-sourced-db/errors";
 
 export type { EventSourcedLogger } from "../utils/logger";
 
@@ -72,6 +73,8 @@ export type CompactOutboxResult = {
   compacted: number;
   /** Pending events removed because a later event now covers them. */
   removed: number;
+  /** True when another context held the sync lock, so this call did nothing. */
+  deferred: boolean;
 };
 
 export type OutboxEntry = {
@@ -350,6 +353,13 @@ export type OutboundEvent = {
    */
   baseVersion: string | null;
   timestamp: number;
+  /**
+   * True when this event replaces a chain of local mutations for the same row.
+   * Merge it with any newer events for that row. See `docs/compaction.md`.
+   */
+  compaction?: boolean;
+  /** When the device folded the chain. Absent on ordinary events. */
+  compactedAt?: number | null;
 };
 
 /**
@@ -540,11 +550,20 @@ export type SyncPushPreset = "default" | "serverless" | "vercel";
 
 /**
  * When a sync is allowed to push. `delayMinutes` is the minimum gap after the
- * last sync. `minEvents` is how many unpushed outbox events open the gate
- * early. With both, either condition is enough.
+ * last successful push. `minEvents` is how many unpushed outbox events open the
+ * gate early. With both, either condition is enough.
+ *
+ * `minEvents` counts outbox rows. With `compactOnWrite` (the default), repeated
+ * edits of one row stay one event, so the count follows dirty rows rather than
+ * individual keystrokes.
  */
 export type SyncBatchOptions = {
+  /** Minimum gap after the last successful push. */
   delayMinutes?: number;
+  /**
+   * Unpushed outbox rows that open the gate early. With `compactOnWrite`, one
+   * row's edits count as a single event.
+   */
   minEvents?: number;
 };
 
@@ -806,14 +825,18 @@ export interface EventSourcedSharedOptions {
    */
   maxPushBytes?: number;
   /**
-   * Holds `sync()` and `manualSync()` until enough unpushed events have piled
-   * up, or until enough time has passed since the last sync. Provide either
-   * limit, or both. With both, whichever arrives first allows the sync: a
-   * burst of `minEvents` pushes immediately, and a quieter period pushes
-   * whatever is waiting once `delayMinutes` has elapsed. Before the first sync
-   * that clock starts at the oldest unpushed event. A sync with nothing to
-   * push still runs, so pulls are not held back. Calling either method too
-   * early throws {@link SyncBatchLimitError}.
+   * Holds the push half of `sync()` and `manualSync()` until enough unpushed
+   * events have piled up, or until enough time has passed since the last
+   * successful push. Pull still runs. Provide either limit, or both. With
+   * both, whichever arrives first allows the push: a burst of `minEvents`
+   * pushes immediately, and a quieter period pushes whatever is waiting once
+   * `delayMinutes` has elapsed. Before the first successful push that clock
+   * starts at the oldest unpushed event. A sync with nothing to push still
+   * pushes (an empty batch) and pulls. When the push is held, the result's
+   * `batchHold` is set and nothing is thrown.
+   *
+   * `minEvents` counts outbox rows. With `compactOnWrite`, repeated edits of
+   * one row stay one event.
    */
   syncBatch?: SyncBatchOptions;
   /**
@@ -926,9 +949,10 @@ export type EventSourcedDB<TDefs extends Record<string, CollectionDefConstraint>
    */
   pruneSyncedEvents: (options?: PruneOptions) => Promise<PruneResult>;
   /**
-   * For each row in each synced collection, folds that row's outbox events
-   * since its latest compaction into one `compaction` event. Synced events are
-   * included. The new event is what the next `sync()` pushes.
+   * Folds each synced collection's unsynced outbox chains into one event per
+   * row. Events the server has already accepted stay. The replacement keeps
+   * the queue position of the chain it came from, and the next `sync()` pushes
+   * it. Serialized with sync, so it waits while a push is applying.
    */
   compact: () => Promise<CompactOutboxResult>;
   /**
@@ -960,6 +984,11 @@ export type SyncResult = {
   deadLettered: number;
   /** True when another context held the sync lock, so this call did nothing. */
   deferred: boolean;
+  /**
+   * Set when `syncBatch` skipped the push. Pull still ran. `null` when the
+   * push was allowed.
+   */
+  batchHold: SyncBatchLimitError | null;
   errors: ReadonlyArray<Error>;
 };
 

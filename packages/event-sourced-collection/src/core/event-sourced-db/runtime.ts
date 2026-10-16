@@ -1,6 +1,7 @@
 import type { Collection } from "@tanstack/db";
 
 import type { EmitHook } from "../../internal/hooks";
+import type { OutboxWriteGate } from "../../internal/outbox-gate";
 import type {
   AcceptMutationsCollection,
   ReplayContext,
@@ -45,6 +46,7 @@ export type SyncRuntime = {
   lock: SyncLock | null | undefined;
   lockName: string;
   runExclusive: <T>(fn: () => Promise<T>) => Promise<T>;
+  outboxGate: OutboxWriteGate;
   getSyncEnabled: () => boolean;
   getPushLimits: () => SyncPushLimits;
   syncBatch: SyncBatchOptions | undefined;

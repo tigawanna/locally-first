@@ -119,13 +119,17 @@ export async function writeBackendId(
   });
 }
 
+/**
+ * Records the outcome of a sync. `lastSyncAt` is left untouched when it is
+ * `null`, so a failed or held push does not restart the `syncBatch` delay.
+ */
 export async function writeSyncOutcome(
   syncmeta: Collection<SyncMetaEntry, string>,
-  lastSyncAt: number,
+  lastSyncAt: number | null,
   lastError: string | null,
 ): Promise<void> {
   await patch(syncmeta, (draft) => {
-    draft.lastSyncAt = lastSyncAt;
+    if (lastSyncAt !== null) draft.lastSyncAt = lastSyncAt;
     draft.lastError = lastError;
   });
 }

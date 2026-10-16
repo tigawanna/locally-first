@@ -13,7 +13,13 @@ import {
   SYNC_LOCK_PREFIX,
 } from "../internal/constants";
 import { pendingLocalOnlyOutbox } from "../internal/collection-queries";
-import { compactOutbox, foldedOutboxBody, nextLocalSeq } from "../internal/compact-outbox";
+import {
+  anchorFoldedEvent,
+  compactOutbox,
+  foldedOutboxBody,
+  nextLocalSeq,
+} from "../internal/compact-outbox";
+import { createOutboxWriteGate } from "../internal/outbox-gate";
 import { createHookEmitter } from "../internal/hooks";
 import { replayInbox } from "../internal/replay";
 import { createSerialQueue } from "../internal/serial-queue";
@@ -48,6 +54,7 @@ import { buildUnsyncedOutboxEntry } from "./event-sourced-db/outbox-entry";
 import type { SyncRuntime } from "./event-sourced-db/runtime";
 import { createSyncCycle } from "./event-sourced-db/sync-cycle";
 import { assertReservedNamesAvailable } from "./event-sourced-db/errors";
+import type { ClientIdRef, SeqCounter } from "./event-sourced-db/refs";
 
 export { SyncBatchLimitError, UnsyncedChangesError } from "./event-sourced-db/errors";
 
@@ -61,9 +68,6 @@ type CollectionDefConstraint = {
     indexType?: new (id: number, expression: never, name?: string, options?: never) => unknown;
   }>;
 };
-
-type SeqCounter = { value: number };
-type ClientIdRef = { value: string };
 
 /**
  * Low-level factory: wires persistence, collections, outbox/inbox, and sync.
@@ -195,6 +199,7 @@ export async function createEventSourcedDB<
   const localOnlyIds = new Set(
     Object.keys(config.collections).filter((id) => config.collections[id]!.localOnly === true),
   );
+  const outboxGate = createOutboxWriteGate();
 
   for (const collectionId of Object.keys(config.collections)) {
     const def = config.collections[collectionId]!;
@@ -211,6 +216,7 @@ export async function createEventSourcedDB<
       eventSchemaVersion,
       conflictDetection,
       compactOnWrite,
+      outboxGate,
       emit,
       log,
     };
@@ -340,6 +346,7 @@ export async function createEventSourcedDB<
     lock: config.lock,
     lockName,
     runExclusive,
+    outboxGate,
     getSyncEnabled: () => syncEnabled,
     getPushLimits: () => pushLimits,
     syncBatch: config.syncBatch,
@@ -395,47 +402,66 @@ export async function createEventSourcedDB<
     },
     pruneSyncedEvents: maintenance.pruneSyncedEvents,
     compact: () =>
-      compactOutbox(syncedCollections, outbox, {
-        squash(pending) {
-          const latest = pending[pending.length - 1]!;
-          const now = Date.now();
-          return buildUnsyncedOutboxEntry({
-            identity: latest,
-            body: foldedOutboxBody({ unpushedEvents: pending, latest: latest.payload, now }),
-            ids: {
-              outbox,
-              seq,
-              eventId: generateEventId(),
-              txId: generateEventId(),
-              timestamp: now,
-            },
-          });
-        },
-        deleteRow(lastSynced, current) {
-          const now = Date.now();
-          return buildUnsyncedOutboxEntry({
-            identity: {
-              collectionId: current.collectionId,
-              key: current.key,
-              clientId: current.clientId,
-              schemaVersion: current.schemaVersion,
-            },
-            body: {
-              type: "delete",
-              payload: lastSynced.payload,
-              previous: lastSynced.payload,
-              baseVersion: lastSynced.eventId,
-            },
-            ids: {
-              outbox,
-              seq,
-              eventId: generateEventId(),
-              txId: generateEventId(),
-              timestamp: now,
-            },
-          });
-        },
-      }),
+      runExclusive(() =>
+        cycle.withLock(
+          () =>
+            outboxGate.run(() =>
+              compactOutbox(
+                syncedCollections,
+                outbox,
+                {
+                  squash(pending) {
+                    const latest = pending[pending.length - 1]!;
+                    const anchor = anchorFoldedEvent(pending, outbox);
+                    const now = Date.now();
+                    return buildUnsyncedOutboxEntry({
+                      identity: latest,
+                      body: foldedOutboxBody({
+                        unpushedEvents: pending,
+                        latest: latest.payload,
+                        now,
+                      }),
+                      ids: {
+                        outbox,
+                        seq,
+                        eventId: anchor.eventId,
+                        txId: anchor.txId,
+                        timestamp: anchor.timestamp,
+                        localSeq: anchor.localSeq,
+                      },
+                    });
+                  },
+                  deleteRow(lastSynced, current) {
+                    return buildUnsyncedOutboxEntry({
+                      identity: {
+                        collectionId: current.collectionId,
+                        key: current.key,
+                        clientId: current.clientId,
+                        schemaVersion: current.schemaVersion,
+                      },
+                      body: {
+                        type: "delete",
+                        payload: lastSynced.payload,
+                        previous: lastSynced.payload,
+                        baseVersion: lastSynced.eventId,
+                      },
+                      ids: {
+                        outbox,
+                        seq,
+                        eventId: current.eventId,
+                        txId: current.txId,
+                        timestamp: current.timestamp,
+                        localSeq: current.localSeq,
+                      },
+                    });
+                  },
+                },
+                (eventId) => outboxGate.isReserved(eventId),
+              ),
+            ),
+          { compacted: 0, removed: 0, deferred: true },
+        ),
+      ),
     resetLocalReplica: maintenance.resetLocalReplica,
     dispose,
   };

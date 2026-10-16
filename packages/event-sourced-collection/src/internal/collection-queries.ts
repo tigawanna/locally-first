@@ -23,6 +23,10 @@ function unwrapQueryRow<T>(row: unknown, isRow: (value: unknown) => value is T):
   return null;
 }
 
+export function readOutboxEntry(row: unknown): OutboxEntry | null {
+  return unwrapQueryRow(row, isOutboxEntry);
+}
+
 function isOutboxEntry(value: unknown): value is OutboxEntry {
   if (typeof value !== "object" || value === null) return false;
   const row = value as { eventId?: unknown; localSeq?: unknown; sync?: unknown };

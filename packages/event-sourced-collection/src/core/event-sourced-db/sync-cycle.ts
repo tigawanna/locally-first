@@ -27,6 +27,7 @@ export function createSyncCycle(deps: SyncRuntime) {
     lock,
     lockName,
     runExclusive,
+    outboxGate,
     getSyncEnabled,
     getPushLimits,
     syncBatch,
@@ -44,8 +45,8 @@ export function createSyncCycle(deps: SyncRuntime) {
     return error;
   }
 
-  /** Throws when `syncBatch` still wants more events or more time since the last sync. */
-  function assertSyncBatchOpen(): void {
+  /** `syncBatch` verdict for the current outbox. Pull is never held by this. */
+  function readBatchVerdict() {
     let pendingCount = 0;
     let oldestPendingAt: number | null = null;
     for (const entry of outbox.state.values()) {
@@ -55,20 +56,13 @@ export function createSyncCycle(deps: SyncRuntime) {
         oldestPendingAt = entry.timestamp;
       }
     }
-    const verdict = decideSyncBatch({
+    return decideSyncBatch({
       batch: syncBatch,
       pendingCount,
       lastSyncAt: readSyncMeta(syncmeta).lastSyncAt,
       oldestPendingAt,
       now: Date.now(),
     });
-    if (verdict.allowed) return;
-    log.info("sync held by syncBatch", {
-      pendingCount: verdict.pendingCount,
-      minEvents: verdict.minEvents,
-      delayRemainingMs: verdict.delayRemainingMs,
-    });
-    throw new SyncBatchLimitError(verdict);
   }
 
   /** Pushes the outbox, pulls the inbox, and pushes again if a backend reset requeued history. */
@@ -81,6 +75,9 @@ export function createSyncCycle(deps: SyncRuntime) {
     let pulled = 0;
     let skipped = 0;
     let deadLettered = 0;
+    let pushAttempted = false;
+    let pushFailed = false;
+    let batchHold: SyncBatchLimitError | null = null;
 
     async function runPush(): Promise<void> {
       if (!transport?.push) {
@@ -88,6 +85,7 @@ export function createSyncCycle(deps: SyncRuntime) {
         return;
       }
 
+      pushAttempted = true;
       try {
         const outcome = await pushOutbox({
           outbox,
@@ -100,18 +98,31 @@ export function createSyncCycle(deps: SyncRuntime) {
           now: Date.now(),
           emit,
           log,
+          outboxGate,
         });
         pushed += outcome.pushed;
         deadLettered += outcome.deadLettered;
         if (outcome.error) {
+          pushFailed = true;
           errors.push(recordError("push", label, outcome.error));
         }
       } catch (err) {
+        pushFailed = true;
         errors.push(recordError("push", label, err));
       }
     }
 
-    await runPush();
+    const verdict = readBatchVerdict();
+    if (verdict.allowed) {
+      await runPush();
+    } else {
+      batchHold = new SyncBatchLimitError(verdict);
+      log.info("push held by syncBatch", {
+        pendingCount: verdict.pendingCount,
+        minEvents: verdict.minEvents,
+        delayRemainingMs: verdict.delayRemainingMs,
+      });
+    }
 
     let requeued = 0;
 
@@ -143,13 +154,27 @@ export function createSyncCycle(deps: SyncRuntime) {
     // sync's push has already run. Upload the requeued history now so a single
     // sync is enough to recover rather than leaving the gap open until the next.
     if (requeued > 0) {
-      log.info(`${label} re-pushing history after backend reset`, { requeued });
-      await runPush();
+      const again = readBatchVerdict();
+      if (again.allowed) {
+        log.info(`${label} re-pushing history after backend reset`, { requeued });
+        await runPush();
+      } else {
+        batchHold ??= new SyncBatchLimitError(again);
+        log.info("re-push held by syncBatch", { requeued });
+      }
     }
 
-    await writeSyncOutcome(syncmeta, Date.now(), errors[0]?.message ?? null);
+    // A failed or held push must not move lastSyncAt, or delayMinutes starts over.
+    const stampLastSync = pushAttempted && !pushFailed;
+    if (stampLastSync || errors.length > 0) {
+      await writeSyncOutcome(
+        syncmeta,
+        stampLastSync ? Date.now() : null,
+        errors[0]?.message ?? null,
+      );
+    }
 
-    return { pushed, pulled, skipped, deadLettered, deferred: false, errors };
+    return { pushed, pulled, skipped, deadLettered, deferred: false, batchHold, errors };
   }
 
   /** Runs `fn` under the cross-context lock when one is configured. */
@@ -199,7 +224,6 @@ export function createSyncCycle(deps: SyncRuntime) {
       }
 
       await outbox.preload();
-      assertSyncBatchOpen();
 
       return withLock(
         () =>
@@ -224,7 +248,6 @@ export function createSyncCycle(deps: SyncRuntime) {
   function manualSync(): Promise<ManualSyncResult> {
     return runExclusive(async () => {
       await outbox.preload();
-      if (getSyncEnabled() && transport) assertSyncBatchOpen();
 
       return withLock<ManualSyncResult>(
         () =>
@@ -304,12 +327,5 @@ export function createSyncCycle(deps: SyncRuntime) {
     return () => statusListeners.delete(listener);
   }
 
-  /**
-   * Retries dead-lettered events.
-   * - Outbound: pushes directly to the sync transport (does not requeue the outbox).
-   * - Inbound: requeues into the inbox and replays immediately.
-   * Omit `eventId` to retry everything. Returns how many were successfully
-   * cleared from the dead-letter queue.
-   */
   return { sync, manualSync, getSyncStatus, subscribeSyncStatus, withLock };
 }

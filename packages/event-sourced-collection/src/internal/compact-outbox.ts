@@ -1,8 +1,8 @@
 import { and, eq, queryOnce, type Collection } from "@tanstack/db";
 
+import type { SeqCounter } from "../core/event-sourced-db/refs";
 import type { CompactOutboxResult, OutboxEntry } from "../core/types";
-
-type SeqCounter = { value: number };
+import { readOutboxEntry } from "./collection-queries";
 
 /**
  * Outbox events for one row that have not been pushed yet, oldest first.
@@ -23,7 +23,7 @@ export async function unpushedOutboxEventsForKey(
       .orderBy(({ event }) => event.localSeq, "asc"),
   );
   return rows.flatMap((row) => {
-    const entry = outboxEntryFromQuery(row);
+    const entry = readOutboxEntry(row);
     return entry ? [entry] : [];
   });
 }
@@ -101,48 +101,48 @@ export async function replaceUnpushedOutboxEvents(
 
 export type CompactableCollection = {
   collectionId: string;
-  collection: { state: { keys: () => Iterable<string | number> } };
 };
 
 /**
- * One row at a time. The query is this collection and this key only. Events
- * before the latest `compactedAt` are already folded into that event, so the
- * chain to squash is that compaction plus anything newer.
+ * Contiguous unsynced suffix. Stops at a synced event or one reserved for an
+ * in-flight push, so a fold never rewrites a payload the server already has
+ * or a payload that has already left the device.
  */
-function outboxEntryFromQuery(row: unknown): OutboxEntry | null {
-  if (isOutboxEntry(row)) return row;
-  if (typeof row === "object" && row !== null && "event" in row) {
-    const wrapped = row.event;
-    if (isOutboxEntry(wrapped)) return wrapped;
-  }
-  return null;
-}
-
-function isOutboxEntry(value: unknown): value is OutboxEntry {
-  if (typeof value !== "object" || value === null) return false;
-  const row = value as {
-    eventId?: unknown;
-    localSeq?: unknown;
-    collectionId?: unknown;
-    type?: unknown;
-  };
-  return (
-    typeof row.eventId === "string" &&
-    typeof row.localSeq === "number" &&
-    typeof row.collectionId === "string" &&
-    typeof row.type === "string"
-  );
-}
-
-function sinceLastCompaction(events: readonly OutboxEntry[]): OutboxEntry[] {
-  let start = 0;
+export function foldableTail(
+  events: readonly OutboxEntry[],
+  isReserved: (eventId: string) => boolean = () => false,
+): OutboxEntry[] {
+  const tail: OutboxEntry[] = [];
   for (let index = events.length - 1; index >= 0; index--) {
-    if (events[index]?.compactedAt != null) {
-      start = index;
-      break;
-    }
+    const event = events[index];
+    if (!event || event.sync || isReserved(event.eventId)) break;
+    tail.push(event);
   }
-  return events.slice(start);
+  tail.reverse();
+  return tail;
+}
+
+/**
+ * The event whose identity the replacement keeps.
+ * A fold that shared its `txId` with another row stays in that transaction,
+ * preferring the newest such event so the latest multi-row write stays atomic.
+ * Otherwise the oldest event wins, which keeps the chain's place in `localSeq`
+ * order instead of moving the folded row behind everything queued after it.
+ */
+export function anchorFoldedEvent(
+  chain: readonly OutboxEntry[],
+  outbox: Collection<OutboxEntry, string>,
+): OutboxEntry {
+  const folding = new Set(chain.map((event) => event.eventId));
+  const siblingTxIds = new Set<string>();
+  for (const entry of outbox.state.values()) {
+    if (!folding.has(entry.eventId)) siblingTxIds.add(entry.txId);
+  }
+  for (let index = chain.length - 1; index >= 0; index--) {
+    const event = chain[index];
+    if (event && siblingTxIds.has(event.txId)) return event;
+  }
+  return chain[0]!;
 }
 
 /**
@@ -182,26 +182,17 @@ async function eventsForKey(
       .where(({ event }) => and(eq(event.collectionId, collectionId), eq(event.key, key))),
   );
   const events = rows.flatMap((row) => {
-    const entry = outboxEntryFromQuery(row);
+    const entry = readOutboxEntry(row);
     return entry ? [entry] : [];
   });
   events.sort((a, b) => a.localSeq - b.localSeq);
   return events;
 }
 
-export async function eventsSinceLastCompaction(
-  outbox: Collection<OutboxEntry, string>,
-  collectionId: string,
-  key: string | number,
-): Promise<OutboxEntry[]> {
-  return sinceLastCompaction(await eventsForKey(outbox, collectionId, key));
-}
-
 /**
- * Walks live row ids and outbox keys. The span that has not been deleted yet
- * folds from its latest compaction, including events already pushed. A span
- * that ends in a delete is dropped when the server never saw it, or reduced
- * to one delete when it did. "Life" is defined on `splitLives`.
+ * One delete-ended span is dropped when the server never saw it, or reduced
+ * to one delete when it did. The span that is still live folds only its
+ * unsynced insert/update tail. "Life" is defined on `splitLives`.
  */
 export type CompactFactory = {
   /** One insert or update covering the span that has not been deleted yet. */
@@ -228,13 +219,16 @@ async function collapseClosedLife(
   outbox: Collection<OutboxEntry, string>,
   life: readonly OutboxEntry[],
   factory: CompactFactory,
+  isReserved: (eventId: string) => boolean,
 ): Promise<{ compacted: number; removed: number }> {
   const suffixStart = life.findIndex((event) => !event.sync);
   if (suffixStart === -1) return { compacted: 0, removed: 0 };
 
   const prefix = life.slice(0, suffixStart);
   const suffix = life.slice(suffixStart);
-  if (suffix.some((event) => event.sync)) return { compacted: 0, removed: 0 };
+  if (suffix.some((event) => event.sync || isReserved(event.eventId))) {
+    return { compacted: 0, removed: 0 };
+  }
   if (suffix.at(-1)?.type !== "delete") return { compacted: 0, removed: 0 };
 
   if (prefix.length === 0) {
@@ -254,34 +248,38 @@ export async function compactOutbox(
   collections: readonly CompactableCollection[],
   outbox: Collection<OutboxEntry, string>,
   factory: CompactFactory,
+  isReserved: (eventId: string) => boolean = () => false,
 ): Promise<CompactOutboxResult> {
+  const allowed = new Set(collections.map((item) => item.collectionId));
+  const keysByCollection = new Map<string, Set<string | number>>();
+  for (const entry of outbox.state.values()) {
+    if (!allowed.has(entry.collectionId)) continue;
+    const keys = keysByCollection.get(entry.collectionId) ?? new Set<string | number>();
+    keys.add(entry.key);
+    keysByCollection.set(entry.collectionId, keys);
+  }
+
   let compacted = 0;
   let removed = 0;
-  for (const { collectionId, collection } of collections) {
-    const keys = new Set<string | number>();
-    for (const key of collection.state.keys()) keys.add(key);
-    for (const entry of outbox.state.values()) {
-      if (entry.collectionId === collectionId) keys.add(entry.key);
-    }
-
+  for (const [collectionId, keys] of keysByCollection) {
     for (const key of keys) {
       const events = await eventsForKey(outbox, collectionId, key);
       const { closed, open } = splitLives(events);
 
       for (const life of closed) {
-        const outcome = await collapseClosedLife(outbox, life, factory);
+        const outcome = await collapseClosedLife(outbox, life, factory, isReserved);
         compacted += outcome.compacted;
         removed += outcome.removed;
       }
 
-      const chain = sinceLastCompaction(open);
+      const chain = foldableTail(open, isReserved);
       if (!canSquash(chain)) continue;
       await replaceUnpushedOutboxEvents(outbox, chain, factory.squash(chain));
       compacted += 1;
       removed += chain.length - 1;
     }
   }
-  return { compacted, removed };
+  return { compacted, removed, deferred: false };
 }
 
 export function allocateLocalSeq(outbox: Collection<OutboxEntry, string>, seq: SeqCounter): number {

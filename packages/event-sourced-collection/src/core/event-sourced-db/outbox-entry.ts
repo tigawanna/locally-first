@@ -2,8 +2,7 @@ import type { Collection } from "@tanstack/db";
 
 import { allocateLocalSeq } from "../../internal/compact-outbox";
 import type { OutboxEntry } from "../types";
-
-type SeqCounter = { value: number };
+import type { SeqCounter } from "./refs";
 
 type OutboxIdentity = Pick<OutboxEntry, "collectionId" | "key" | "clientId" | "schemaVersion">;
 type OutboxBody = Pick<OutboxEntry, "type" | "payload" | "previous" | "baseVersion"> &
@@ -23,6 +22,8 @@ export function buildUnsyncedOutboxEntry(input: {
     eventId: string;
     txId: string;
     timestamp: number;
+    /** Kept when a fold should stay where the chain already was. */
+    localSeq?: number;
   };
 }): OutboxEntry {
   const { identity, body, ids } = input;
@@ -38,7 +39,7 @@ export function buildUnsyncedOutboxEntry(input: {
     schemaVersion: identity.schemaVersion,
     baseVersion: body.baseVersion,
     timestamp: ids.timestamp,
-    localSeq: allocateLocalSeq(ids.outbox, ids.seq),
+    localSeq: ids.localSeq ?? allocateLocalSeq(ids.outbox, ids.seq),
     globalSeq: null,
     sync: false,
     syncStatus: "pending",

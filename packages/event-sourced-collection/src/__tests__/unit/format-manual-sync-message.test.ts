@@ -11,6 +11,7 @@ function result(overrides: Partial<ManualSyncResult> = {}): ManualSyncResult {
     skipped: 0,
     deadLettered: 0,
     deferred: false,
+    batchHold: null,
     errors: [],
     ...overrides,
   };

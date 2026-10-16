@@ -895,7 +895,7 @@ const pending = await queryOnce((q) =>
 | `getSyncStatus`                   | 5.0 ms for both counts    | 86 ms + 13 ms for two `count()` queries. Counts matched.                                                                         |
 | `readPullCursor`                  | 1.5 ms                    | 19.9 ms. The max matched. The persisted cursor is still the floor; inbox rows only raise it.                                     |
 | Delete-all in `resetLocalReplica` | key iterator, no row copy | 5,500 full rows, about 2.8 MB                                                                                                    |
-| `compact()` walking live row ids  | key iterator              | 1,500 full todo rows, about 171 KB. The per-key outbox load is already `queryOnce`.                                              |
+| `compact()`                       | outbox keys only          | A live row with no outbox events has nothing to fold, so the collection key set is not walked.                                   |
 
 Do not convert these five because a caller can `await`. The query is the extra copy.
 

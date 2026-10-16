@@ -121,6 +121,7 @@ describe("syncEnabled", () => {
       skipped: 0,
       deadLettered: 0,
       deferred: false,
+      batchHold: null,
       errors: [],
     });
   });
@@ -254,6 +255,7 @@ describe("offline behavior", () => {
       skipped: 0,
       deadLettered: 0,
       deferred: false,
+      batchHold: null,
       errors: [],
     });
     expect(outboxRows(db)[0]?.sync).toBe(false);
@@ -947,26 +949,57 @@ describe("manualSync", () => {
     expect(result.errors).toEqual([]);
   });
 
-  it("holds a manual sync until enough events are waiting, then allows it", async () => {
+  it("holds the push until enough events are waiting, and still pulls", async () => {
+    let pulled = 0;
     const db = await createDb({
       sync: {
         push: async (events) => ({
           confirmed: events.map((event) => ({ eventId: event.eventId, globalSeq: 1 })),
         }),
-        pull: async () => ({ events: [], cursor: "0", hasMore: false }),
+        pull: async () => {
+          pulled += 1;
+          return { events: [], cursor: "0", hasMore: false };
+        },
       },
       syncBatch: { minEvents: 2, delayMinutes: 10 },
     });
 
     await db.collections.todos.insert(makeTodo("t1")).isPersisted.promise;
-    await expect(db.manualSync()).rejects.toBeInstanceOf(SyncBatchLimitError);
+    const held = await db.manualSync();
+    expect(held.pushed).toBe(0);
+    expect(held.pulled).toBe(0);
+    expect(pulled).toBe(1);
+    expect(held.batchHold).toBeInstanceOf(SyncBatchLimitError);
+    expect(db.getSyncStatus().lastSyncAt).toBeNull();
 
     await db.collections.todos.insert(makeTodo("t2")).isPersisted.promise;
     const result = await db.manualSync();
     expect(result.pushed).toBe(2);
+    expect(result.batchHold).toBeNull();
 
     await db.collections.todos.insert(makeTodo("t3")).isPersisted.promise;
-    await expect(db.sync()).rejects.toBeInstanceOf(SyncBatchLimitError);
+    const heldAgain = await db.sync();
+    expect(heldAgain.pushed).toBe(0);
+    expect(heldAgain.batchHold).toBeInstanceOf(SyncBatchLimitError);
+  });
+
+  it("does not restart the syncBatch delay when the push fails", async () => {
+    const db = await createDb({
+      sync: {
+        push: async () => {
+          throw new Error("push exploded");
+        },
+        pull: async () => ({ events: [], cursor: "0", hasMore: false }),
+      },
+      syncBatch: { minEvents: 1, delayMinutes: 10 },
+    });
+
+    await db.collections.todos.insert(makeTodo("t1")).isPersisted.promise;
+    const result = await db.sync();
+
+    expect(result.errors[0]?.message).toBe("push exploded");
+    expect(db.getSyncStatus().lastError).toBe("push exploded");
+    expect(db.getSyncStatus().lastSyncAt).toBeNull();
   });
 });
 

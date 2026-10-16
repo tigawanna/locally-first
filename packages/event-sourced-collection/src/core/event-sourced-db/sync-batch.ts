@@ -11,11 +11,11 @@ export type SyncBatchVerdict =
     };
 
 /**
- * A sync may run when there is nothing to push, or when every configured limit
+ * A push may run when there is nothing to push, or when every configured limit
  * that can open the gate has been met. With both limits, either is enough:
  * 20 events push immediately, and a quieter stretch pushes whatever is waiting
- * once the delay has passed. Before the first sync, that clock starts at the
- * oldest unpushed event.
+ * once the delay has passed. Before the first successful push, that clock
+ * starts at the oldest unpushed event. The pull half of a sync is not gated.
  */
 export function decideSyncBatch(input: {
   batch: SyncBatchOptions | undefined;

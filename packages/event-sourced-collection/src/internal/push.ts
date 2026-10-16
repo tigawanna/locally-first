@@ -20,6 +20,7 @@ import {
 import type { EmitHook } from "./hooks";
 import { restoreRowVersionAfterConflict } from "./replay";
 import { dueOutboxEntries } from "./collection-queries";
+import type { OutboxWriteGate } from "./outbox-gate";
 import type { ResolvedRetryConfig } from "./types";
 
 export type PushOutcome = {
@@ -44,6 +45,8 @@ export type PushArgs = {
   now: number;
   emit: EmitHook;
   log: EventSourcedLogger;
+  /** Held while outbox rows are read or updated. Not held during the request. */
+  outboxGate: OutboxWriteGate;
 };
 
 /**
@@ -71,6 +74,9 @@ export function toOutboundEvent(entry: OutboxEntry): OutboundEvent {
     schemaVersion: entry.schemaVersion ?? DEFAULT_EVENT_SCHEMA_VERSION,
     baseVersion: entry.baseVersion ?? null,
     timestamp: entry.timestamp,
+    ...(entry.compaction
+      ? { compaction: true as const, compactedAt: entry.compactedAt ?? null }
+      : {}),
   };
 }
 
@@ -306,118 +312,155 @@ async function deadLetterTooLarge(
  * Each batch's result is persisted before the next is sent, so a failure
  * part-way through keeps the progress already made instead of restarting.
  */
+type MarkedBatch = { bytes: number; groups: TxGroup[] };
+
 export async function pushOutbox(args: PushArgs): Promise<PushOutcome> {
-  const { outbox, push, batchSize, maxBytes, now, log } = args;
+  const { outbox, push, batchSize, maxBytes, now, log, outboxGate } = args;
 
-  const due = await dueOutboxEntries(outbox, now);
+  const plan = await outboxGate.run(async () => {
+    const due = await dueOutboxEntries(outbox, now);
 
-  log.debug("push outbox", { dueCount: due.length, batchSize, maxBytes });
+    log.debug("push outbox", { dueCount: due.length, batchSize, maxBytes });
 
-  if (due.length === 0) return { pushed: 0, deadLettered: 0 };
+    if (due.length === 0) return null;
 
-  const { batches, oversized } = packBatches(
-    groupByTransaction(due, maxBytes !== null),
-    batchSize,
-    maxBytes,
-  );
+    // Reserve before yielding the gate. A fold that runs during the request
+    // must not delete these rows: the body already on the wire is the one
+    // the confirmation will apply to.
+    const reservedIds = due.map((entry) => entry.eventId);
+    outboxGate.reserve(reservedIds);
+
+    const { batches, oversized } = packBatches(
+      groupByTransaction(due, maxBytes !== null),
+      batchSize,
+      maxBytes,
+    );
+
+    const marked: MarkedBatch[] = [];
+    for (const batch of batches) {
+      const attempted: OutboxEntry[] = [];
+
+      for (const group of batch.groups) {
+        for (const entry of group.entries) {
+          const attemptCount = (entry.attemptCount ?? 0) + 1;
+
+          await outbox.update(entry.eventId, (draft) => {
+            draft.syncStatus = "pending";
+            draft.attemptCount = attemptCount;
+            draft.lastAttemptAt = now;
+            draft.nextAttemptAt = null;
+            draft.lastError = null;
+            draft.lastErrorCode = null;
+            draft.retryable = null;
+          }).isPersisted.promise;
+
+          attempted.push({ ...entry, attemptCount });
+        }
+      }
+
+      const byId = new Map(attempted.map((entry) => [entry.eventId, entry]));
+      marked.push({
+        bytes: batch.bytes,
+        groups: batch.groups.map((group) => ({
+          bytes: group.bytes,
+          entries: group.entries.map((entry) => byId.get(entry.eventId)!),
+        })),
+      });
+    }
+
+    return { reservedIds, dueCount: due.length, oversized, marked };
+  });
+
+  if (!plan) return { pushed: 0, deadLettered: 0 };
 
   let pushed = 0;
   let deadLettered = 0;
 
-  for (const group of oversized) {
-    deadLettered += await deadLetterTooLarge(
-      args,
-      group.entries,
-      `Transaction is ${group.bytes} bytes, over maxPushBytes (${maxBytes})`,
-    );
-  }
-
-  for (const batch of batches) {
-    const attempted: OutboxEntry[] = [];
-
-    for (const group of batch.groups) {
-      for (const entry of group.entries) {
-        const attemptCount = (entry.attemptCount ?? 0) + 1;
-
-        await outbox.update(entry.eventId, (draft) => {
-          draft.syncStatus = "pending";
-          draft.attemptCount = attemptCount;
-          draft.lastAttemptAt = now;
-          draft.nextAttemptAt = null;
-          draft.lastError = null;
-          draft.lastErrorCode = null;
-          draft.retryable = null;
-        }).isPersisted.promise;
-
-        attempted.push({ ...entry, attemptCount });
+  try {
+    deadLettered += await outboxGate.run(async () => {
+      let count = 0;
+      for (const group of plan.oversized) {
+        count += await deadLetterTooLarge(
+          args,
+          group.entries,
+          `Transaction is ${group.bytes} bytes, over maxPushBytes (${maxBytes})`,
+        );
       }
-    }
-
-    const byId = new Map(attempted.map((entry) => [entry.eventId, entry]));
-    const attemptedGroups = batch.groups.map((group) => ({
-      bytes: group.bytes,
-      entries: group.entries.map((entry) => byId.get(entry.eventId)!),
-    }));
-
-    const response = await postGroups(push, attemptedGroups, log);
-
-    log.info("push batch confirmed", {
-      sent: attempted.length,
-      bytes: batch.bytes,
-      confirmed: response.confirmed.length,
-      failed: response.failed.length,
-      tooLarge: response.tooLarge.length,
+      return count;
     });
 
-    for (const confirmation of response.confirmed) {
-      if (!outbox.has(confirmation.eventId)) continue;
+    for (const batch of plan.marked) {
+      const attempted = batch.groups.flatMap((group) => group.entries);
+      const response = await postGroups(push, batch.groups, log);
 
-      await outbox.update(confirmation.eventId, (draft) => {
-        draft.sync = true;
-        draft.syncStatus = "synced";
-        draft.globalSeq = confirmation.globalSeq;
-        draft.nextAttemptAt = null;
-        draft.lastError = null;
-        draft.lastErrorCode = null;
-        draft.retryable = null;
-      }).isPersisted.promise;
+      const stopped = await outboxGate.run(async () => {
+        log.info("push batch confirmed", {
+          sent: attempted.length,
+          bytes: batch.bytes,
+          confirmed: response.confirmed.length,
+          failed: response.failed.length,
+          tooLarge: response.tooLarge.length,
+        });
 
-      pushed++;
-      args.emit("onEventPushed", {
-        eventId: confirmation.eventId,
-        globalSeq: confirmation.globalSeq,
+        for (const confirmation of response.confirmed) {
+          if (!outbox.has(confirmation.eventId)) continue;
+
+          await outbox.update(confirmation.eventId, (draft) => {
+            draft.sync = true;
+            draft.syncStatus = "synced";
+            draft.globalSeq = confirmation.globalSeq;
+            draft.nextAttemptAt = null;
+            draft.lastError = null;
+            draft.lastErrorCode = null;
+            draft.retryable = null;
+          }).isPersisted.promise;
+
+          pushed++;
+          args.emit("onEventPushed", {
+            eventId: confirmation.eventId,
+            globalSeq: confirmation.globalSeq,
+          });
+        }
+
+        for (const failure of response.failed) {
+          const entry = attempted.find((row) => row.eventId === failure.eventId);
+          if (!entry) continue;
+
+          deadLettered += await handleFailure(args, entry, failure);
+        }
+
+        deadLettered += await deadLetterTooLarge(
+          args,
+          response.tooLarge,
+          "Server rejected the transaction as too large (HTTP 413)",
+        );
+
+        if (response.error !== undefined) {
+          // Transport-level failure: back off what was not acknowledged and stop.
+          // Everything confirmed so far stays synced.
+          deadLettered += await backoffBatch(args, response.unsent, response.error);
+          const error =
+            response.error instanceof Error ? response.error : new Error(String(response.error));
+          log.warn("push stopped after transport failure", {
+            message: error.message,
+            pushed,
+            remaining: plan.dueCount - pushed,
+          });
+          return { pushed, deadLettered, error };
+        }
+
+        return null;
       });
+
+      if (stopped) return stopped;
     }
 
-    for (const failure of response.failed) {
-      const entry = byId.get(failure.eventId);
-      if (!entry) continue;
-
-      deadLettered += await handleFailure(args, entry, failure);
-    }
-
-    deadLettered += await deadLetterTooLarge(
-      args,
-      response.tooLarge,
-      "Server rejected the transaction as too large (HTTP 413)",
-    );
-
-    if (response.error !== undefined) {
-      // Transport-level failure: back off what was not acknowledged and stop.
-      // Everything confirmed so far stays synced.
-      deadLettered += await backoffBatch(args, response.unsent, response.error);
-      const error =
-        response.error instanceof Error ? response.error : new Error(String(response.error));
-      log.warn("push stopped after transport failure", {
-        message: error.message,
-        pushed,
-        remaining: due.length - pushed,
-      });
-      return { pushed, deadLettered, error };
-    }
+    return { pushed, deadLettered };
+  } finally {
+    await outboxGate.run(async () => {
+      outboxGate.release(plan.reservedIds);
+    });
   }
-
-  return { pushed, deadLettered };
 }
 
 /** Returns 1 when the event was dead-lettered, 0 when it stays queued for retry. */
