@@ -1,15 +1,24 @@
 import { SiteIcon } from "@/components/icon/SiteIcon";
 import { useReportSiteError } from "@/lib/tanstack/router/use-report-site-error";
-import { Link } from "@tanstack/react-router";
+import { Link, type ErrorComponentProps } from "@tanstack/react-router";
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 
-interface RouterErrorComponentProps {
-  error: Error;
+function toError(error: unknown) {
+  if (error instanceof Error) {
+    return error;
+  }
+
+  if (typeof error === "string") {
+    return new Error(error);
+  }
+
+  return new Error("Unknown error");
 }
 
-export function RouterErrorComponent({ error }: RouterErrorComponentProps) {
-  useReportSiteError(error);
+export function RouterErrorComponent({ error }: ErrorComponentProps) {
+  const resolvedError = toError(error);
+  useReportSiteError(resolvedError);
 
   return (
     <div
@@ -22,7 +31,7 @@ export function RouterErrorComponent({ error }: RouterErrorComponentProps) {
         <RouterErrorProductionContent />
       </div>
 
-      {import.meta.env.DEV ? <RouterErrorDevelopmentPanel error={error} /> : null}
+      {import.meta.env.DEV ? <RouterErrorDevelopmentPanel error={resolvedError} /> : null}
     </div>
   );
 }
@@ -94,7 +103,7 @@ function RouterErrorProductionContent() {
   );
 }
 
-function RouterErrorDevelopmentPanel({ error }: RouterErrorComponentProps) {
+function RouterErrorDevelopmentPanel({ error }: { error: Error }) {
   const [copied, setCopied] = useState(false);
 
   const copyStackTrace = async () => {

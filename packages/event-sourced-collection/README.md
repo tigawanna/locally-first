@@ -4,6 +4,9 @@ Event-sourced local-first database on top of TanStack DB persistence. Every `ins
 
 Design decisions, sync pipeline, and open issues: [ARCHITECTURE.md](./ARCHITECTURE.md)  
 Config options deep-dive (when to use each knob): [docs/usage.md](./docs/usage.md)  
+How compaction folds edits on the device, and a Hono handler that merges them: [docs/compaction.md](./docs/compaction.md)  
+How local chains fold, and how a Hono server should merge them: [docs/compaction.md](./docs/compaction.md)  
+Compaction on the device and on a Hono server: [docs/compaction.md](./docs/compaction.md)  
 Release history: [CHANGELOG.md](./CHANGELOG.md)
 
 ## Install
