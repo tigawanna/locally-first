@@ -7,21 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.0.15] - 2026-10-16
+
+Switch to this if you edit the same rows often, or you want fewer round trips.
+
 ### Added
 
 - `compactOnWrite` (default `true`). An update replaces the unsynced outbox chain
   for that row with one `compaction` event carrying `compactedAt`, instead of
-  appending another partial update. `db.compact()` folds a log that was written
-  with the option off. The folded event keeps its place in the queue and its
-  transaction, and `compaction` / `compactedAt` are sent on push. Server
-  guidance is in `docs/compaction.md`: merge the compacted event with newer
-  upstream updates, do not drop them.
+  appending another partial update. The folded event keeps its place in the
+  queue and its transaction, and `compaction` / `compactedAt` are sent on push.
+  Set `compactOnWrite: false` only if the server must see every intermediate
+  edit. Server guidance is in `docs/compaction.md`: merge the compacted event
+  with newer upstream updates, do not drop them.
+- `db.compact()`. Folds unsynced insert/update tails that were written with
+  compaction off, or that are still sitting as a chain. Already-synced events
+  stay, so a later compact does not upload them again.
 - `syncBatch` (`minEvents` and/or `delayMinutes`). Holds the push until enough
   unpushed rows are waiting or the delay has elapsed. Pull still runs. A held
   push is reported as `SyncResult.batchHold` (`SyncBatchLimitError` fields) and
   is not thrown. With `compactOnWrite`, `minEvents` counts outbox rows, so
   repeated edits of one row count once.
-- `db.compact()`. Folds unsynced insert/update tails. Already-synced events stay.
+
+```ts
+const db = createEventSourcedDB({
+  // compactOnWrite: true is the default
+  syncBatch: { minEvents: 20, delayMinutes: 10 },
+  // ...
+});
+
+await db.compact();
+```
+
+### Changed
+
+- `resetLocalReplica()` clears the stored backend id, so a client configured
+  with `backendMismatch: "fail"` can adopt a rebuilt backend after a local reset.
+
+## [0.0.14] - 2026-10-06
+
+### Added
+
+- `db.resetLocalReplica()`. Drops local rows and sync state for a fresh device
+  replica. `localOnly` collections are kept. Refuses while unsynced changes are
+  still in the outbox and throws `UnsyncedChangesError` unless you pass
+  `{ discardPending: true }`.
+
+## [0.0.13] - 2026-10-06
+
+### Added
+
+- `localOnly: true` on a collection definition. The collection stays on the
+  device and does not write outbox events or participate in push/pull.
+
+## [0.0.12] - 2026-10-06
+
+### Added
+
+- `db.getPushLimits()` / `db.setPushLimits()`. Read and change `maxPushEvents`
+  and `maxPushBytes` after the database is created.
+
+## [0.0.11] - 2026-10-06
+
+### Added
+
+- `maxPushBytes` and `syncPreset` on database creation, so a push batch stops
+  on byte size as well as event count.
+- `recordLocalEchoes` (also listed under 0.0.10). Set `false` to advance the
+  pull cursor past this device's own events without writing resolved inbox
+  echo rows.
 
 ## [0.0.10] - 2026-09-08
 
@@ -90,6 +144,12 @@ Reliability-focused release: dead-lettering, backend identity, retries, conflict
 - `createEventSourcedLogger`, `generateEventId` (UUIDv7)
 - Platform entry points: `event-sourced-collection/browser`, `event-sourced-collection/react-native`
 
+[0.0.15]: https://github.com/tigawanna/locally-first/releases/tag/v0.0.15
+[0.0.14]: https://www.npmjs.com/package/event-sourced-collection/v/0.0.14
+[0.0.13]: https://www.npmjs.com/package/event-sourced-collection/v/0.0.13
+[0.0.12]: https://www.npmjs.com/package/event-sourced-collection/v/0.0.12
+[0.0.11]: https://www.npmjs.com/package/event-sourced-collection/v/0.0.11
+[0.0.10]: https://www.npmjs.com/package/event-sourced-collection/v/0.0.10
 [0.0.7]: https://www.npmjs.com/package/event-sourced-collection/v/0.0.7
 [0.0.6]: https://www.npmjs.com/package/event-sourced-collection/v/0.0.6
 [0.0.5]: https://www.npmjs.com/package/event-sourced-collection/v/0.0.5
